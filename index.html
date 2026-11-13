@@ -5,13 +5,22 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <title>Nikolaus gegen Weihnachtsmann - Tischtennis</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🏓</text></svg>">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Mountains+of+Christmas:wght@700&family=Baloo+2:wght@500;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
+<div id="snowfall-css" aria-hidden="true">
+  <div class="flakes flakes-1"></div>
+  <div class="flakes flakes-2"></div>
+  <div class="flakes flakes-3"></div>
+</div>
 <div id="app">
 
   <!-- START / MODE SELECT -->
   <section id="screen-mode" class="screen active">
+    <div class="title-badge">🔔</div>
     <h1>🎄 Nikolaus gegen Weihnachtsmann 🏓</h1>
     <h2>Tischtennis</h2>
     <p class="subtitle">Wie möchtest du spielen?</p>
@@ -64,6 +73,7 @@
       <canvas id="game-canvas"></canvas>
       <div id="countdown"></div>
       <div id="win-overlay" class="hidden">
+        <div class="win-trophy">🏆</div>
         <div id="win-text"></div>
         <button id="btn-again" class="big-btn">🔄 Nochmal spielen</button>
         <button id="btn-menu" class="big-btn secondary">🏠 Zum Startbildschirm</button>

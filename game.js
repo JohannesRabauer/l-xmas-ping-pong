@@ -455,7 +455,7 @@ const BALL_VISUAL_R = 17; // etwas groesser als der Logik-Radius, damit der Ball
 const BALL_ARC_HEIGHT = 55; // kosmetischer Bogen (Flug ueber das Netz), rein optisch
 
 let canvas, renderer, scene, camera;
-let tableGroup, netGroup, ballMesh, charL, charR;
+let tableGroup, netGroup, ballMesh, charL, charR, snowPoints;
 let rafId = null;
 let paused = false;
 let gameOver = false;
@@ -491,11 +491,27 @@ const input = {
 function initThree() {
   scene = new THREE.Scene();
   scene.background = new THREE.Color(0x071a10);
-  scene.fog = new THREE.Fog(0x071a10, 950, 2300);
+  scene.fog = new THREE.Fog(0x071a10, 1400, 2600);
 
-  camera = new THREE.PerspectiveCamera(42, LOGICAL_W / LOGICAL_H, 10, 4000);
-  camera.position.set(0, 560, -770);
-  camera.lookAt(0, 10, 70);
+  // Vogelperspektive (fast senkrecht von oben), wie im urspruenglichen
+  // 2D-Spiel, aber als echte 3D-Kamera. Eine orthographische Kamera wird
+  // verwendet, damit es (anders als bei einer Perspektivkamera) keine
+  // Objekt-Position-abhaengige Verzerrung gibt - hohe Objekte wie die Muetzen
+  // "kippen" sonst an den Bildschirmraendern stark zur Seite. WICHTIG:
+  // camera.up muss explizit auf einen horizontalen Vektor gesetzt werden,
+  // bevor lookAt() aufgerufen wird - sonst waere die Rotation um die
+  // Blickachse undefiniert (Blickrichtung fast parallel zum Standard-Up
+  // (0,1,0)). (0,0,-1) sorgt dafuer, dass "nach oben auf dem Bildschirm" der
+  // Welt-Richtung -Z entspricht und "nach unten auf dem Bildschirm" +Z -
+  // exakt wie die Logik-Y-Achse (worldZ) erwartet, damit Maus-/Touch-Ziehen
+  // nicht mehr spiegelverkehrt wirkt.
+  const halfH = 330;
+  const halfW = halfH * (LOGICAL_W / LOGICAL_H);
+  camera = new THREE.OrthographicCamera(-halfW, halfW, halfH, -halfH, 10, 4000);
+  camera.up.set(0, 0, -1);
+  camera.position.set(0, 900, -230);
+  camera.lookAt(0, 0, 60);
+  camera.updateProjectionMatrix();
 
   renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
   renderer.shadowMap.enabled = true;
@@ -508,6 +524,8 @@ function initThree() {
   netGroup = buildNet();
   scene.add(netGroup);
   scene.add(buildTrees());
+  snowPoints = buildSnowfall();
+  scene.add(snowPoints);
 
   const ballMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.35 });
   ballMesh = new THREE.Mesh(new THREE.SphereGeometry(BALL_VISUAL_R, 20, 20), ballMat);
@@ -633,6 +651,7 @@ function buildTree(x, z, height) {
   tree.add(trunk);
 
   const leafMat = new THREE.MeshStandardMaterial({ color: 0x1f5c33, roughness: 0.8 });
+  const snowCapMat = new THREE.MeshStandardMaterial({ color: 0xf3f8ff, roughness: 0.6 });
   const tiers = 3;
   for (let i = 0; i < tiers; i++) {
     const coneH = height * 0.5;
@@ -641,6 +660,10 @@ function buildTree(x, z, height) {
     cone.position.y = height * 0.25 + i * coneH * 0.42 + coneH / 2;
     cone.castShadow = true;
     tree.add(cone);
+    // kleine Schneehaube auf jeder Tanne-Etage, fuer weihnachtliche Stimmung
+    const cap = new THREE.Mesh(new THREE.ConeGeometry(coneR * 0.82, coneH * 0.22, 10), snowCapMat);
+    cap.position.y = cone.position.y + coneH / 2 - coneH * 0.06;
+    tree.add(cap);
   }
   const starMat = new THREE.MeshStandardMaterial({
     color: 0xffd65c,
@@ -667,6 +690,50 @@ function buildTrees() {
     group.add(buildTree(x, z, 75 + Math.abs(x + z) % 25));
   }
   return group;
+}
+
+// Stimmungsvoller Schneefall im Hintergrund: ein einzelnes Points-Objekt mit
+// vielen kleinen Schneeflocken, die ueber der Szene langsam herabfallen und
+// unten wieder nach oben "recycled" werden (rein kosmetisch).
+let snowPositions = null;
+let snowSpeeds = null;
+function buildSnowfall() {
+  const count = 260;
+  const spread = 1400;
+  const topY = 500;
+  const bottomY = -180;
+  const geo = new THREE.BufferGeometry();
+  snowPositions = new Float32Array(count * 3);
+  snowSpeeds = new Float32Array(count);
+  for (let i = 0; i < count; i++) {
+    snowPositions[i * 3] = (Math.random() - 0.5) * spread;
+    snowPositions[i * 3 + 1] = bottomY + Math.random() * (topY - bottomY);
+    snowPositions[i * 3 + 2] = (Math.random() - 0.5) * spread;
+    snowSpeeds[i] = 16 + Math.random() * 28;
+  }
+  geo.setAttribute("position", new THREE.BufferAttribute(snowPositions, 3));
+  const mat = new THREE.PointsMaterial({
+    color: 0xffffff,
+    size: 5,
+    transparent: true,
+    opacity: 0.85,
+    depthWrite: false,
+  });
+  const points = new THREE.Points(geo, mat);
+  points.userData.topY = topY;
+  points.userData.bottomY = bottomY;
+  return points;
+}
+
+function updateSnowfall(dt, snow) {
+  if (!snow || !snowPositions) return;
+  const pos = snow.geometry.attributes.position.array;
+  const { topY, bottomY } = snow.userData;
+  for (let i = 0; i < snowSpeeds.length; i++) {
+    pos[i * 3 + 1] -= snowSpeeds[i] * dt;
+    if (pos[i * 3 + 1] < bottomY) pos[i * 3 + 1] = topY;
+  }
+  snow.geometry.attributes.position.needsUpdate = true;
 }
 
 // Baut die Mütze als echtes 3D-Objekt (kein LEGO-Design: kein Zylinderkopf,
@@ -710,47 +777,87 @@ function buildHat3D(char, c) {
   return hat;
 }
 
-// Baut eine Spielfigur komplett aus generischen 3D-Grundformen (Box/Kugel/
-// Kegel) - rundem Kopf statt Zylinder, ohne Noppen, ohne Trapez-Torso/Klauen,
-// damit es garantiert kein LEGO-Design ist. side: 1 = links, -1 = rechts
-// (steuert nur, in welcher Hand der Schlaeger sitzt).
+// Baut eine Spielfigur komplett aus generischen, selbst entworfenen 3D-
+// Grundformen (Lathe-Rundkoerper/Kapsel/Kugel/Kegel) - rundem Kopf statt
+// Zylinder, ohne Noppen, ohne Trapez-Torso/Klauen, damit es garantiert kein
+// LEGO-Design ist. side: 1 = links, -1 = rechts (steuert nur, in welcher
+// Hand der Schlaeger sitzt).
 function buildCharacterModel(char, side) {
   const c = CHAR_COLORS[char];
   const group = new THREE.Group();
 
-  const torsoMat = new THREE.MeshStandardMaterial({ color: c.main, roughness: 0.55 });
-  const torso = new THREE.Mesh(new THREE.BoxGeometry(72, 62, 50), torsoMat);
-  torso.position.y = 31;
+  // --- Torso: glatter, rundlicher "Spielzeugfiguren"-Koerper (Lathe-Profil
+  // um die Y-Achse rotiert) statt eckigem Kasten - bewusst KEIN Trapez/Box,
+  // sieht freundlich-rundlich aus wie eine handgefertigte Holzfigur.
+  const torsoMat = new THREE.MeshStandardMaterial({ color: c.main, roughness: 0.5 });
+  const torsoProfile = [
+    new THREE.Vector2(0, 0),
+    new THREE.Vector2(30, 3),
+    new THREE.Vector2(35, 16),
+    new THREE.Vector2(34, 32),
+    new THREE.Vector2(29, 48),
+    new THREE.Vector2(20, 58),
+    new THREE.Vector2(13, 63),
+    new THREE.Vector2(0, 65),
+  ];
+  const TORSO_TOP_Y = 65;
+  const torso = new THREE.Mesh(new THREE.LatheGeometry(torsoProfile, 28), torsoMat);
   torso.castShadow = true;
   torso.receiveShadow = true;
   group.add(torso);
 
-  const beltMat = new THREE.MeshStandardMaterial({ color: c.accent, roughness: 0.45 });
-  const belt = new THREE.Mesh(new THREE.BoxGeometry(76, 10, 54), beltMat);
-  belt.position.y = 14;
+  // Guertel als schlanker Ring um die breiteste Stelle des Torsos, plus
+  // runde Schnalle vorne - statt eines eckigen Kastens.
+  const beltMat = new THREE.MeshStandardMaterial({ color: c.accent, roughness: 0.4 });
+  const belt = new THREE.Mesh(new THREE.CylinderGeometry(35.5, 35.5, 9, 28, 1, true), beltMat);
+  belt.position.y = 22;
   group.add(belt);
+  const buckleMat = new THREE.MeshStandardMaterial({ color: 0xffe9a8, roughness: 0.25, metalness: 0.5 });
+  const buckle = new THREE.Mesh(new THREE.SphereGeometry(7, 14, 14), buckleMat);
+  buckle.position.set(0, 22, -35.5);
+  group.add(buckle);
 
-  const armMat = new THREE.MeshStandardMaterial({ color: c.main, roughness: 0.55 });
-  const armGeo = new THREE.BoxGeometry(16, 46, 16);
+  // --- Arme: weiche Kapseln statt Kaesten, mit runden "Fausthandschuh"-
+  // Haenden statt Klauen. ---
+  const armMat = new THREE.MeshStandardMaterial({ color: c.main, roughness: 0.5 });
+  const armGeo = new THREE.CapsuleGeometry(9, 32, 6, 12);
   const armL = new THREE.Mesh(armGeo, armMat);
-  armL.position.set(-44, 36, 0);
+  armL.position.set(-41, 38, 0);
+  armL.rotation.z = 0.12;
   armL.castShadow = true;
   const armR = new THREE.Mesh(armGeo, armMat);
-  armR.position.set(44, 36, 0);
+  armR.position.set(41, 38, 0);
+  armR.rotation.z = -0.12;
   armR.castShadow = true;
   group.add(armL, armR);
 
-  const handMat = new THREE.MeshStandardMaterial({ color: 0xf2f2f2, roughness: 0.7 });
-  const handGeo = new THREE.SphereGeometry(11, 12, 12);
+  const handMat = new THREE.MeshStandardMaterial({ color: 0xf7f7f7, roughness: 0.65 });
+  const handGeo = new THREE.SphereGeometry(12, 14, 14);
   const handL = new THREE.Mesh(handGeo, handMat);
-  handL.position.set(-44, 11, 0);
+  handL.position.set(-43, 16, 0);
   const handR = new THREE.Mesh(handGeo, handMat);
-  handR.position.set(44, 11, 0);
+  handR.position.set(43, 16, 0);
+  handL.castShadow = true;
+  handR.castShadow = true;
   group.add(handL, handR);
 
-  const headMat = new THREE.MeshStandardMaterial({ color: 0xf2c788, roughness: 0.6 });
-  const head = new THREE.Mesh(new THREE.SphereGeometry(32, 22, 22), headMat);
-  head.position.y = 62 + 32 - 6;
+  // --- Fuesse: kleine, flache runde Stiefel statt Beinen - geben der
+  // Figur einen stabilen, "geerdeten" Stand von oben betrachtet. ---
+  const bootMat = new THREE.MeshStandardMaterial({ color: 0x2a1d14, roughness: 0.6 });
+  const bootGeo = new THREE.SphereGeometry(14, 14, 10);
+  const bootL = new THREE.Mesh(bootGeo, bootMat);
+  bootL.position.set(-17, 4, 5);
+  bootL.scale.set(1, 0.55, 1.35);
+  const bootR = new THREE.Mesh(bootGeo, bootMat);
+  bootR.position.set(17, 4, 5);
+  bootR.scale.set(1, 0.55, 1.35);
+  bootL.castShadow = true;
+  bootR.castShadow = true;
+  group.add(bootL, bootR);
+
+  const headMat = new THREE.MeshStandardMaterial({ color: 0xf2c788, roughness: 0.55 });
+  const head = new THREE.Mesh(new THREE.SphereGeometry(32, 26, 26), headMat);
+  head.position.y = TORSO_TOP_Y + 32 - 6;
   head.castShadow = true;
   group.add(head);
 
@@ -773,10 +880,10 @@ function buildCharacterModel(char, side) {
   group.add(hat);
 
   // Tischtennis-Schlaeger in der zum Netz zeigenden Hand
-  const batMat = new THREE.MeshStandardMaterial({ color: 0xc0392b, roughness: 0.4 });
-  const bat = new THREE.Mesh(new THREE.CylinderGeometry(16, 16, 4, 20), batMat);
+  const batMat = new THREE.MeshStandardMaterial({ color: 0xc0392b, roughness: 0.35 });
+  const bat = new THREE.Mesh(new THREE.CylinderGeometry(16, 16, 4, 24), batMat);
   bat.rotation.x = Math.PI / 2;
-  bat.position.set(side * 44, 11, -8);
+  bat.position.set(side * 43, 16, -8);
   bat.castShadow = true;
   group.add(bat);
   const rimMat = new THREE.MeshStandardMaterial({ color: 0x1b1b1b, roughness: 0.5 });
@@ -838,9 +945,13 @@ function startGame() {
   paused = false;
   gameOver = false;
   hideWinOverlay();
+  // WICHTIG: zuerst alte Schleife/Listener stoppen, DANACH neue Controls
+  // anhaengen - sonst wuerde das abschliessende detachControls() in
+  // cancelGameLoop() die gerade gesetzten Tastatur-Listener sofort wieder
+  // loeschen (Ursache des "W/S bewegt nichts"-Bugs bei "Nochmal spielen").
+  cancelGameLoop();
   attachControls();
   startCountdownServe(Math.random() < 0.5 ? 1 : -1);
-  cancelGameLoop();
   rafId = requestAnimationFrame(loop);
 }
 
@@ -928,11 +1039,19 @@ function attachControls() {
     input.touchLeftY = null;
     input.touchRightY = null;
   };
+  // Beim Loslassen der Maustaste die Maussteuerung wieder freigeben, sonst
+  // bliebe die zuletzt gezogene Position fuer immer "eingerastet" und
+  // blockiert danach die Tastatursteuerung (input.touchLeftY !== null).
+  window.onmouseup = () => {
+    input.touchLeftY = null;
+    input.touchRightY = null;
+  };
 }
 
 function detachControls() {
   window.onkeydown = null;
   window.onkeyup = null;
+  window.onmouseup = null;
 }
 
 /* --------------------------- Spiellogik ------------------------------ */
@@ -1009,6 +1128,7 @@ function loop(ts) {
   if (!paused && !gameOver) {
     update(dt);
   }
+  updateSnowfall(dt, snowPoints);
   draw();
 }
 
