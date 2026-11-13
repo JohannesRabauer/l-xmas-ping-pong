@@ -20,8 +20,13 @@ const CHAR_NAMES = {
 };
 
 const CHAR_COLORS = {
-  nikolaus: { main: "#b5281f", trim: "#f5f7fa", accent: "#d4af37" },
-  weihnachtsmann: { main: "#e0342a", trim: "#f5f7fa", accent: "#2e7d32" },
+  // Bewusst stark unterschiedliche Farbwelten (nicht nur zwei Rottoene),
+  // damit die Figuren auch aus der Vogelperspektive (Top-Down-Kamera) und
+  // auf kleinen mobilen Bildschirmen klar unterscheidbar bleiben: Nikolaus
+  // = dunkles Bischofs-Burgunderrot mit Gold, Weihnachtsmann = klassisches
+  // helles Rot mit Weiss/Schwarz.
+  nikolaus: { main: "#7a1f3d", trim: "#ecd18a", accent: "#f4d035" },
+  weihnachtsmann: { main: "#d4211f", trim: "#f5f7fa", accent: "#222222" },
 };
 
 /* ------------------------- Bildschirm-Logik ------------------------- */
@@ -81,195 +86,6 @@ document.getElementById("btn-menu").addEventListener("click", () => {
 document.getElementById("btn-pause").addEventListener("click", togglePause);
 
 /* ------------------------- Figuren zeichnen ------------------------- */
-// Zeichnet eine kleine, komplett selbst entworfene "Spielzeug-Klötzchen"-Figur
-// (generische, chunky Blockform mit rundem Kopf - bewusst KEIN LEGO-Design:
-// kein zylindrischer gelber Kopf, keine Stud-Noppen, keine Trapez-Torso-Form/
-// Klauenhände). char: "nikolaus" (Bischofsmütze) oder "weihnachtsmann" (Zipfelmütze)
-function drawCharacterBust(ctx, cx, cy, r, char) {
-  const c = CHAR_COLORS[char];
-  ctx.save();
-  ctx.translate(cx, cy);
-  ctx.lineJoin = "round";
-
-  // weicher Schatten unter der Figur
-  ctx.save();
-  ctx.fillStyle = "rgba(0,0,0,0.25)";
-  ctx.beginPath();
-  ctx.ellipse(r * 0.05, r * 1.55, r * 0.9, r * 0.2, 0, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.restore();
-
-  // --- Torso: chunky, gerundeter "Spielzeug-Block" (kein LEGO-Trapez) ---
-  ctx.fillStyle = shade(c.main, -6);
-  roundRectPath(ctx, -r * 0.95, r * 0.45, r * 1.9, r * 1.15, r * 0.32);
-  ctx.fill();
-  // Highlight-Kante oben links (Plastik-Glanz)
-  ctx.fillStyle = shade(c.main, 22);
-  roundRectPath(ctx, -r * 0.95, r * 0.45, r * 1.9, r * 0.32, r * 0.3);
-  ctx.fill();
-  // Umriss
-  ctx.strokeStyle = "rgba(30,20,15,0.55)";
-  ctx.lineWidth = Math.max(1.2, r * 0.045);
-  roundRectPath(ctx, -r * 0.95, r * 0.45, r * 1.9, r * 1.15, r * 0.32);
-  ctx.stroke();
-  // Gürtel/Knöpfe
-  ctx.fillStyle = c.accent;
-  roundRectPath(ctx, -r * 0.5, r * 0.98, r, r * 0.16, r * 0.06);
-  ctx.fill();
-
-  // --- Arme (blockig, Stummel-"Mitten"-Hände statt Klauen) ---
-  ctx.fillStyle = c.main;
-  roundRectPath(ctx, -r * 1.25, r * 0.55, r * 0.34, r * 0.85, r * 0.17);
-  ctx.fill();
-  roundRectPath(ctx, r * 0.91, r * 0.55, r * 0.34, r * 0.85, r * 0.17);
-  ctx.fill();
-  ctx.fillStyle = "#f2f2f2";
-  ctx.beginPath();
-  ctx.arc(-r * 1.08, r * 1.42, r * 0.2, 0, Math.PI * 2);
-  ctx.arc(r * 1.08, r * 1.42, r * 0.2, 0, Math.PI * 2);
-  ctx.fill();
-
-  // --- Kopf: rund (ausdrücklich kein Zylinder) ---
-  const faceGrad = ctx.createRadialGradient(-r * 0.15, -r * 0.2, r * 0.1, 0, 0, r * 0.7);
-  faceGrad.addColorStop(0, "#ffe6bd");
-  faceGrad.addColorStop(1, "#f2c788");
-  ctx.fillStyle = faceGrad;
-  ctx.beginPath();
-  ctx.arc(0, 0, r * 0.62, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.strokeStyle = "rgba(30,20,15,0.4)";
-  ctx.lineWidth = Math.max(1, r * 0.035);
-  ctx.beginPath();
-  ctx.arc(0, 0, r * 0.62, 0, Math.PI * 2);
-  ctx.stroke();
-
-  // Augenbrauen
-  ctx.strokeStyle = "#e8e8e8";
-  ctx.lineWidth = Math.max(1, r * 0.055);
-  ctx.lineCap = "round";
-  ctx.beginPath();
-  ctx.moveTo(-r * 0.32, -r * 0.18);
-  ctx.quadraticCurveTo(-r * 0.22, -r * 0.26, -r * 0.12, -r * 0.19);
-  ctx.moveTo(r * 0.12, -r * 0.19);
-  ctx.quadraticCurveTo(r * 0.22, -r * 0.26, r * 0.32, -r * 0.18);
-  ctx.stroke();
-
-  // Wangen
-  ctx.fillStyle = "#ff9d8a";
-  ctx.globalAlpha = 0.5;
-  ctx.beginPath();
-  ctx.arc(-r * 0.34, r * 0.14, r * 0.13, 0, Math.PI * 2);
-  ctx.arc(r * 0.34, r * 0.14, r * 0.13, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.globalAlpha = 1;
-
-  // Augen mit Glanzpunkt (einfache Punkte, nicht LEGO-typische Striche)
-  ctx.fillStyle = "#2b2b2b";
-  ctx.beginPath();
-  ctx.arc(-r * 0.22, -r * 0.05, r * 0.075, 0, Math.PI * 2);
-  ctx.arc(r * 0.22, -r * 0.05, r * 0.075, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.fillStyle = "#ffffff";
-  ctx.beginPath();
-  ctx.arc(-r * 0.19, -r * 0.08, r * 0.022, 0, Math.PI * 2);
-  ctx.arc(r * 0.25, -r * 0.08, r * 0.022, 0, Math.PI * 2);
-  ctx.fill();
-
-  // Nase
-  ctx.fillStyle = "#f2a97c";
-  ctx.beginPath();
-  ctx.arc(0, r * 0.04, r * 0.07, 0, Math.PI * 2);
-  ctx.fill();
-
-  // Lächeln
-  ctx.strokeStyle = "#7a2f12";
-  ctx.lineWidth = Math.max(1, r * 0.06);
-  ctx.beginPath();
-  ctx.arc(0, r * 0.12, r * 0.22, 0.15 * Math.PI, 0.85 * Math.PI);
-  ctx.stroke();
-
-  // Bart
-  ctx.fillStyle = "#ffffff";
-  ctx.beginPath();
-  ctx.moveTo(-r * 0.58, r * 0.05);
-  ctx.quadraticCurveTo(-r * 0.6, r * 0.9, 0, r * 1.05);
-  ctx.quadraticCurveTo(r * 0.6, r * 0.9, r * 0.58, r * 0.05);
-  ctx.quadraticCurveTo(0, r * 0.45, -r * 0.58, r * 0.05);
-  ctx.fill();
-  // leichte Bartstruktur
-  ctx.strokeStyle = "rgba(200,200,200,0.5)";
-  ctx.lineWidth = Math.max(0.5, r * 0.02);
-  for (let i = -2; i <= 2; i++) {
-    ctx.beginPath();
-    ctx.moveTo(i * r * 0.09, r * 0.35);
-    ctx.quadraticCurveTo(i * r * 0.1, r * 0.7, i * r * 0.06, r * 0.98);
-    ctx.stroke();
-  }
-
-  // Schnurrbart
-  ctx.fillStyle = "#f2f2f2";
-  ctx.beginPath();
-  ctx.ellipse(-r * 0.2, r * 0.12, r * 0.18, r * 0.09, -0.3, 0, Math.PI * 2);
-  ctx.ellipse(r * 0.2, r * 0.12, r * 0.18, r * 0.09, 0.3, 0, Math.PI * 2);
-  ctx.fill();
-
-  if (char === "nikolaus") {
-    // Bischofsmütze (Mitra): hohe, gespaltene rote Mütze mit weißem Rand und goldenem Kreuz
-    const mitreGrad = ctx.createLinearGradient(0, -r * 1.65, 0, -r * 0.42);
-    mitreGrad.addColorStop(0, shade(c.main, 20));
-    mitreGrad.addColorStop(1, shade(c.main, -10));
-    ctx.fillStyle = mitreGrad;
-    ctx.beginPath();
-    ctx.moveTo(-r * 0.62, -r * 0.42);
-    ctx.quadraticCurveTo(-r * 0.3, -r * 1.55, 0, -r * 1.65);
-    ctx.quadraticCurveTo(r * 0.3, -r * 1.55, r * 0.62, -r * 0.42);
-    ctx.closePath();
-    ctx.fill();
-    // Mittelgrat-Highlight
-    ctx.strokeStyle = "rgba(255,255,255,0.35)";
-    ctx.lineWidth = Math.max(1, r * 0.04);
-    ctx.beginPath();
-    ctx.moveTo(0, -r * 1.6);
-    ctx.lineTo(0, -r * 0.5);
-    ctx.stroke();
-    // weißer Rand mit Fellstruktur
-    drawFurBand(ctx, 0, -r * 0.42, r * 0.66, r * 0.17, c.trim);
-    // goldenes Kreuz
-    ctx.strokeStyle = c.accent;
-    ctx.lineWidth = Math.max(1, r * 0.07);
-    ctx.lineCap = "round";
-    ctx.beginPath();
-    ctx.moveTo(0, -r * 1.5);
-    ctx.lineTo(0, -r * 0.6);
-    ctx.moveTo(-r * 0.16, -r * 1.1);
-    ctx.lineTo(r * 0.16, -r * 1.1);
-    ctx.stroke();
-  } else {
-    // Weihnachtsmann: runde Zipfelmütze mit Bommel
-    const hatGrad = ctx.createLinearGradient(0, -r * 1.5, 0, -r * 0.35);
-    hatGrad.addColorStop(0, shade(c.main, 20));
-    hatGrad.addColorStop(1, shade(c.main, -10));
-    ctx.fillStyle = hatGrad;
-    ctx.beginPath();
-    ctx.moveTo(-r * 0.62, -r * 0.35);
-    ctx.quadraticCurveTo(-r * 0.75, -r * 1.3, r * 0.15, -r * 1.5);
-    ctx.quadraticCurveTo(r * 0.85, -r * 1.35, r * 0.62, -r * 0.35);
-    ctx.closePath();
-    ctx.fill();
-    // weißer Rand mit Fellstruktur
-    drawFurBand(ctx, 0, -r * 0.4, r * 0.68, r * 0.18, c.trim);
-    // Bommel
-    const pomGrad = ctx.createRadialGradient(r * 0.62, -r * 1.48, r * 0.02, r * 0.68, -r * 1.42, r * 0.17);
-    pomGrad.addColorStop(0, "#ffffff");
-    pomGrad.addColorStop(1, "#e3e3e3");
-    ctx.fillStyle = pomGrad;
-    ctx.beginPath();
-    ctx.arc(r * 0.68, -r * 1.42, r * 0.17, 0, Math.PI * 2);
-    ctx.fill();
-  }
-
-  ctx.restore();
-}
 
 // Zeichnet nur Gesicht + Bart (ohne Mütze, ohne Körper) für die 3D-Kopf-Textur.
 // Die Mütze wird für die 3D-Figur als echtes 3D-Objekt gebaut (siehe buildHat3D).
@@ -360,51 +176,66 @@ function drawFaceDetails(ctx, cx, cy, r, char) {
 }
 
 // Hilfsfunktion: gerundetes Rechteck als Pfad (für den blockigen Torso)
-function roundRectPath(ctx, x, y, w, h, radius) {
-  const r = Math.min(radius, w / 2, h / 2);
-  ctx.beginPath();
-  ctx.moveTo(x + r, y);
-  ctx.arcTo(x + w, y, x + w, y + h, r);
-  ctx.arcTo(x + w, y + h, x, y + h, r);
-  ctx.arcTo(x, y + h, x, y, r);
-  ctx.arcTo(x, y, x + w, y, r);
-  ctx.closePath();
-}
-
-// Heller/dunkler Farbton einer Hex-Farbe berechnen (percent: -100..100)
-function shade(hex, percent) {
-  const n = parseInt(hex.slice(1), 16);
-  const amt = Math.round(2.55 * percent);
-  const r = Math.min(255, Math.max(0, (n >> 16) + amt));
-  const g = Math.min(255, Math.max(0, ((n >> 8) & 0xff) + amt));
-  const b = Math.min(255, Math.max(0, (n & 0xff) + amt));
-  return `rgb(${r}, ${g}, ${b})`;
-}
-
-// Zeichnet einen fellartigen weißen Rand (kleine Knubbel statt glatter Ellipse)
-function drawFurBand(ctx, cx, cy, rx, ry, color) {
-  ctx.fillStyle = color;
-  ctx.beginPath();
-  ctx.ellipse(cx, cy, rx, ry, 0, 0, Math.PI * 2);
-  ctx.fill();
-  const bumps = 10;
-  for (let i = 0; i <= bumps; i++) {
-    const t = i / bumps;
-    const bx = cx - rx + t * rx * 2;
-    ctx.beginPath();
-    ctx.arc(bx, cy - ry * 0.15, ry * 0.45, 0, Math.PI * 2);
-    ctx.fill();
-  }
-}
-
-function renderCharacterPreviews() {
+// Charakterauswahl-Vorschau: statt eines flachen gemalten Bildes zeigt
+// jedes Vorschau-Canvas jetzt eine echte, leicht laufende/wippende 3D-
+// Miniaturszene desselben Modells, das auch im Spiel verwendet wird (siehe
+// buildCharacterModel/applyCharacterAnim weiter unten).
+const previewRigs = [];
+function initCharacterPreviews() {
   document.querySelectorAll(".char-preview").forEach((canvas) => {
-    const ctx = canvas.getContext("2d");
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-    drawCharacterBust(ctx, canvas.width / 2, canvas.height / 1.55, canvas.width * 0.26, canvas.dataset.preview);
+    const char = canvas.dataset.preview;
+    const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+    renderer.setSize(canvas.width, canvas.height, false);
+    renderer.outputColorSpace = THREE.SRGBColorSpace;
+
+    const scene = new THREE.Scene();
+    scene.add(new THREE.HemisphereLight(0xffffff, 0x3a2a1a, 0.95));
+    // Hauptlicht auf derselben (negativen Z-)Seite wie die Kamera, damit das
+    // Gesicht der Figur beleuchtet statt im Schatten liegt.
+    const key = new THREE.DirectionalLight(0xfff3d6, 1.15);
+    key.position.set(-100, 200, -160);
+    scene.add(key);
+    const fill = new THREE.DirectionalLight(0xbcd6ff, 0.35);
+    fill.position.set(120, 80, 80);
+    scene.add(fill);
+
+    const camera = new THREE.PerspectiveCamera(28, canvas.width / canvas.height, 10, 2000);
+    // Negative Z, da das Gesicht der Figur (siehe buildCharacterModel) zur
+    // negativen Z-Achse zeigt - so blickt die Vorschau-Kamera der Figur ins
+    // Gesicht statt auf ihren Ruecken, und die volle Koerperhoehe (Fuesse
+    // bis Muetzenspitze) passt vollstaendig ins Bild.
+    camera.position.set(-90, 150, -330);
+    camera.lookAt(0, 90, 0);
+
+    const model = buildCharacterModel(char, 1);
+    scene.add(model);
+
+    previewRigs.push({
+      renderer,
+      scene,
+      camera,
+      model,
+      anim: { walkPhase: Math.random() * Math.PI * 2, hitTimer: 1 },
+    });
   });
+  if (previewRigs.length) requestAnimationFrame(animatePreviews);
 }
-renderCharacterPreviews();
+
+let lastPreviewT = null;
+function animatePreviews(t) {
+  if (lastPreviewT === null) lastPreviewT = t;
+  const dt = Math.min(0.05, (t - lastPreviewT) / 1000);
+  lastPreviewT = t;
+  for (const rig of previewRigs) {
+    rig.anim.walkPhase += dt * 3.2;
+    applyCharacterAnim(rig.model, rig.anim, false, 0, 0);
+    rig.model.rotation.y = Math.sin(t / 2600) * 0.55; // sanftes Hin-und-Her-Drehen zum Vorfuehren
+    rig.renderer.render(rig.scene, rig.camera);
+  }
+  requestAnimationFrame(animatePreviews);
+}
+initCharacterPreviews();
 
 /* ----------------------------- Audio -------------------------------- */
 let audioCtx = null;
@@ -1051,6 +882,10 @@ function startGame() {
   // solange #screen-game "display: none" ist, liefert der Wrapper 0 Breite/Hoehe.
   showScreen("game");
   resizeCanvas();
+  // removeEventListener vor addEventListener macht dies ueber mehrere
+  // startGame()-Aufrufe hinweg idempotent (sonst sammeln sich bei jedem
+  // "Nochmal spielen"/Neustart doppelte resize-Listener an).
+  window.removeEventListener("resize", resizeCanvas);
   window.addEventListener("resize", resizeCanvas);
   paddleL.y = LOGICAL_H / 2 - paddleL.h / 2;
   paddleR.y = LOGICAL_H / 2 - paddleR.h / 2;
@@ -1135,6 +970,12 @@ function attachControls() {
   };
 
   const handleTouch = (e) => {
+    // Touches auf UI-Buttons (Pause, Sieg-Overlay "Nochmal spielen"/"Zum
+    // Startbildschirm") NICHT abfangen - sonst wuerde preventDefault() das
+    // synthetische Klick-Event unterdruecken und die Buttons waeren auf
+    // Touch-Geraeten wirkungslos (Ursache des "Zurueck zum Start"/"Nochmal
+    // spielen" funktioniert nicht auf dem Handy"-Bugs).
+    if (e.target.closest("#win-overlay, #btn-pause")) return;
     const rect = canvas.getBoundingClientRect();
     input.touchLeftY = null;
     input.touchRightY = null;
@@ -1147,6 +988,7 @@ function attachControls() {
     e.preventDefault();
   };
   const onTouchEnd = (e) => {
+    if (e.target.closest("#win-overlay, #btn-pause")) return;
     if (e.touches.length === 0) {
       input.touchLeftY = null;
       input.touchRightY = null;
