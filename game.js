@@ -1,7 +1,11 @@
 // Nikolaus gegen Weihnachtsmann - Tischtennis
-// Ein originales Weihnachts-Pong-Spiel. Alle Figuren werden selbst gezeichnet
-// (keine Bilder/Logos Dritter), daher keine Urheberrechts- oder Markenprobleme.
+// Ein originales Weihnachts-Pong-Spiel in echtem 3D (Three.js). Alle Figuren
+// werden selbst aus einfachen 3D-Grundformen gebaut (kein LEGO-Design: runder
+// statt zylindrischer Kopf, keine Noppen, generische Blockform), daher keine
+// Urheberrechts- oder Markenprobleme.
 "use strict";
+
+import * as THREE from "three";
 
 /* ----------------------------- Zustand ----------------------------- */
 const state = {
@@ -267,6 +271,94 @@ function drawCharacterBust(ctx, cx, cy, r, char) {
   ctx.restore();
 }
 
+// Zeichnet nur Gesicht + Bart (ohne Mütze, ohne Körper) für die 3D-Kopf-Textur.
+// Die Mütze wird für die 3D-Figur als echtes 3D-Objekt gebaut (siehe buildHat3D).
+function drawFaceDetails(ctx, cx, cy, r, char) {
+  const c = CHAR_COLORS[char];
+  ctx.save();
+  ctx.translate(cx, cy);
+  ctx.lineJoin = "round";
+
+  const faceGrad = ctx.createRadialGradient(-r * 0.15, -r * 0.2, r * 0.1, 0, 0, r * 0.7);
+  faceGrad.addColorStop(0, "#ffe6bd");
+  faceGrad.addColorStop(1, "#f2c788");
+  ctx.fillStyle = faceGrad;
+  ctx.beginPath();
+  ctx.arc(0, 0, r * 0.62, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Augenbrauen
+  ctx.strokeStyle = "#e8e8e8";
+  ctx.lineWidth = Math.max(1, r * 0.055);
+  ctx.lineCap = "round";
+  ctx.beginPath();
+  ctx.moveTo(-r * 0.32, -r * 0.18);
+  ctx.quadraticCurveTo(-r * 0.22, -r * 0.26, -r * 0.12, -r * 0.19);
+  ctx.moveTo(r * 0.12, -r * 0.19);
+  ctx.quadraticCurveTo(r * 0.22, -r * 0.26, r * 0.32, -r * 0.18);
+  ctx.stroke();
+
+  // Wangen
+  ctx.fillStyle = "#ff9d8a";
+  ctx.globalAlpha = 0.5;
+  ctx.beginPath();
+  ctx.arc(-r * 0.34, r * 0.14, r * 0.13, 0, Math.PI * 2);
+  ctx.arc(r * 0.34, r * 0.14, r * 0.13, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.globalAlpha = 1;
+
+  // Augen mit Glanzpunkt
+  ctx.fillStyle = "#2b2b2b";
+  ctx.beginPath();
+  ctx.arc(-r * 0.22, -r * 0.05, r * 0.075, 0, Math.PI * 2);
+  ctx.arc(r * 0.22, -r * 0.05, r * 0.075, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = "#ffffff";
+  ctx.beginPath();
+  ctx.arc(-r * 0.19, -r * 0.08, r * 0.022, 0, Math.PI * 2);
+  ctx.arc(r * 0.25, -r * 0.08, r * 0.022, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Nase
+  ctx.fillStyle = "#f2a97c";
+  ctx.beginPath();
+  ctx.arc(0, r * 0.04, r * 0.07, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Lächeln
+  ctx.strokeStyle = "#7a2f12";
+  ctx.lineWidth = Math.max(1, r * 0.06);
+  ctx.beginPath();
+  ctx.arc(0, r * 0.12, r * 0.22, 0.15 * Math.PI, 0.85 * Math.PI);
+  ctx.stroke();
+
+  // Bart
+  ctx.fillStyle = "#ffffff";
+  ctx.beginPath();
+  ctx.moveTo(-r * 0.58, r * 0.05);
+  ctx.quadraticCurveTo(-r * 0.6, r * 0.9, 0, r * 1.05);
+  ctx.quadraticCurveTo(r * 0.6, r * 0.9, r * 0.58, r * 0.05);
+  ctx.quadraticCurveTo(0, r * 0.45, -r * 0.58, r * 0.05);
+  ctx.fill();
+  ctx.strokeStyle = "rgba(200,200,200,0.5)";
+  ctx.lineWidth = Math.max(0.5, r * 0.02);
+  for (let i = -2; i <= 2; i++) {
+    ctx.beginPath();
+    ctx.moveTo(i * r * 0.09, r * 0.35);
+    ctx.quadraticCurveTo(i * r * 0.1, r * 0.7, i * r * 0.06, r * 0.98);
+    ctx.stroke();
+  }
+
+  // Schnurrbart
+  ctx.fillStyle = "#f2f2f2";
+  ctx.beginPath();
+  ctx.ellipse(-r * 0.2, r * 0.12, r * 0.18, r * 0.09, -0.3, 0, Math.PI * 2);
+  ctx.ellipse(r * 0.2, r * 0.12, r * 0.18, r * 0.09, 0.3, 0, Math.PI * 2);
+  ctx.fill();
+
+  ctx.restore();
+}
+
 // Hilfsfunktion: gerundetes Rechteck als Pfad (für den blockigen Torso)
 function roundRectPath(ctx, x, y, w, h, radius) {
   const r = Math.min(radius, w / 2, h / 2);
@@ -359,8 +451,11 @@ function sfxWin() {
 const WIN_SCORE = 5;
 const LOGICAL_W = 900;
 const LOGICAL_H = 500;
+const BALL_VISUAL_R = 17; // etwas groesser als der Logik-Radius, damit der Ball in 3D gut sichtbar ist
+const BALL_ARC_HEIGHT = 55; // kosmetischer Bogen (Flug ueber das Netz), rein optisch
 
-let canvas, ctx;
+let canvas, renderer, scene, camera;
+let tableGroup, netGroup, ballMesh, charL, charR;
 let rafId = null;
 let paused = false;
 let gameOver = false;
@@ -373,6 +468,16 @@ const PADDLE_SPEED = 430; // px/sec logical
 const BOT_MAX_SPEED = 330;
 const scores = { left: 0, right: 0 };
 
+// Rechnet die flache Spiellogik-Koordinate (x: 0..LOGICAL_W, y: 0..LOGICAL_H)
+// in 3D-Weltkoordinaten um (X bleibt links/rechts, die Logik-Y-Achse wird zur
+// Tisch-Tiefe Z). Die komplette Physik oben bleibt dadurch unveraendert.
+function worldX(logicalX) {
+  return logicalX - LOGICAL_W / 2;
+}
+function worldZ(logicalY) {
+  return logicalY - LOGICAL_H / 2;
+}
+
 const input = {
   wDown: false,
   sDown: false,
@@ -382,11 +487,338 @@ const input = {
   touchRightY: null,
 };
 
+/* --------------------------- 3D-Szene bauen --------------------------- */
+function initThree() {
+  scene = new THREE.Scene();
+  scene.background = new THREE.Color(0x071a10);
+  scene.fog = new THREE.Fog(0x071a10, 950, 2300);
+
+  camera = new THREE.PerspectiveCamera(42, LOGICAL_W / LOGICAL_H, 10, 4000);
+  camera.position.set(0, 560, -770);
+  camera.lookAt(0, 10, 70);
+
+  renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+  renderer.shadowMap.enabled = true;
+  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  renderer.outputColorSpace = THREE.SRGBColorSpace;
+
+  scene.add(buildLights());
+  tableGroup = buildTable();
+  scene.add(tableGroup);
+  netGroup = buildNet();
+  scene.add(netGroup);
+  scene.add(buildTrees());
+
+  const ballMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.35 });
+  ballMesh = new THREE.Mesh(new THREE.SphereGeometry(BALL_VISUAL_R, 20, 20), ballMat);
+  ballMesh.castShadow = true;
+  scene.add(ballMesh);
+}
+
+function buildLights() {
+  const group = new THREE.Group();
+  group.add(new THREE.HemisphereLight(0xbcd4ff, 0x14110c, 0.6));
+  group.add(new THREE.AmbientLight(0x443322, 0.35));
+
+  const dirLight = new THREE.DirectionalLight(0xfff2d9, 1.2);
+  dirLight.position.set(220, 520, -260);
+  dirLight.castShadow = true;
+  dirLight.shadow.mapSize.set(1024, 1024);
+  dirLight.shadow.camera.left = -520;
+  dirLight.shadow.camera.right = 520;
+  dirLight.shadow.camera.top = 420;
+  dirLight.shadow.camera.bottom = -420;
+  dirLight.shadow.camera.near = 50;
+  dirLight.shadow.camera.far = 1400;
+  dirLight.shadow.bias = -0.0015;
+  group.add(dirLight, dirLight.target);
+
+  // warme Zusatzlichter bei den Baeumen fuer eine gemuetliche Atmosphaere
+  const warmL = new THREE.PointLight(0xffb84d, 0.6, 500);
+  warmL.position.set(-540, 110, 0);
+  const warmR = new THREE.PointLight(0xffb84d, 0.6, 500);
+  warmR.position.set(540, 110, 0);
+  group.add(warmL, warmR);
+
+  return group;
+}
+
+function buildTable() {
+  const group = new THREE.Group();
+  const topMat = new THREE.MeshStandardMaterial({ color: 0x0e3b24, roughness: 0.6 });
+  const top = new THREE.Mesh(new THREE.BoxGeometry(LOGICAL_W, 20, LOGICAL_H), topMat);
+  top.position.y = -10;
+  top.receiveShadow = true;
+  group.add(top);
+
+  const legMat = new THREE.MeshStandardMaterial({ color: 0x2b2b2b, roughness: 0.7 });
+  const legGeo = new THREE.BoxGeometry(18, 150, 18);
+  const legOffsets = [
+    [-LOGICAL_W / 2 + 40, -LOGICAL_H / 2 + 40],
+    [LOGICAL_W / 2 - 40, -LOGICAL_H / 2 + 40],
+    [-LOGICAL_W / 2 + 40, LOGICAL_H / 2 - 40],
+    [LOGICAL_W / 2 - 40, LOGICAL_H / 2 - 40],
+  ];
+  for (const [lx, lz] of legOffsets) {
+    const leg = new THREE.Mesh(legGeo, legMat);
+    leg.position.set(lx, -95, lz);
+    leg.castShadow = true;
+    group.add(leg);
+  }
+
+  const lineMat = new THREE.MeshStandardMaterial({ color: 0xdfe9e2, roughness: 0.5 });
+  const edgeT = 6;
+  const borderDefs = [
+    [LOGICAL_W, edgeT, 0, LOGICAL_H / 2 - edgeT / 2],
+    [LOGICAL_W, edgeT, 0, -LOGICAL_H / 2 + edgeT / 2],
+    [edgeT, LOGICAL_H, -LOGICAL_W / 2 + edgeT / 2, 0],
+    [edgeT, LOGICAL_H, LOGICAL_W / 2 - edgeT / 2, 0],
+  ];
+  for (const [w, d, x, z] of borderDefs) {
+    const edge = new THREE.Mesh(new THREE.BoxGeometry(w, 2, d), lineMat);
+    edge.position.set(x, 0.6, z);
+    group.add(edge);
+  }
+  const center = new THREE.Mesh(new THREE.BoxGeometry(6, 2, LOGICAL_H - 12), lineMat);
+  center.position.set(0, 0.6, 0);
+  group.add(center);
+
+  const floorMat = new THREE.MeshStandardMaterial({ color: 0x0a1f14, roughness: 0.95 });
+  const floor = new THREE.Mesh(new THREE.PlaneGeometry(4000, 4000), floorMat);
+  floor.rotation.x = -Math.PI / 2;
+  floor.position.y = -170;
+  floor.receiveShadow = true;
+  group.add(floor);
+
+  return group;
+}
+
+function buildNet() {
+  const group = new THREE.Group();
+  const netHeight = 60;
+  const netMat = new THREE.MeshStandardMaterial({
+    color: 0xffffff,
+    transparent: true,
+    opacity: 0.35,
+    side: THREE.DoubleSide,
+    roughness: 0.9,
+  });
+  const netMesh = new THREE.Mesh(new THREE.PlaneGeometry(LOGICAL_H - 10, netHeight), netMat);
+  netMesh.rotation.y = Math.PI / 2;
+  netMesh.position.set(0, netHeight / 2, 0);
+  group.add(netMesh);
+
+  const tapeMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.4 });
+  const tape = new THREE.Mesh(new THREE.BoxGeometry(6, 4, LOGICAL_H - 10), tapeMat);
+  tape.position.set(0, netHeight, 0);
+  group.add(tape);
+
+  const postMat = new THREE.MeshStandardMaterial({ color: 0x333333, roughness: 0.4 });
+  const postGeo = new THREE.CylinderGeometry(4, 4, netHeight + 10, 10);
+  const postL = new THREE.Mesh(postGeo, postMat);
+  postL.position.set(0, netHeight / 2, -(LOGICAL_H / 2 - 6));
+  const postR = new THREE.Mesh(postGeo, postMat);
+  postR.position.set(0, netHeight / 2, LOGICAL_H / 2 - 6);
+  group.add(postL, postR);
+
+  return group;
+}
+
+function buildTree(x, z, height) {
+  const tree = new THREE.Group();
+  const trunkMat = new THREE.MeshStandardMaterial({ color: 0x5b3a21, roughness: 0.9 });
+  const trunk = new THREE.Mesh(new THREE.CylinderGeometry(6, 8, height * 0.25, 8), trunkMat);
+  trunk.position.y = height * 0.125;
+  trunk.castShadow = true;
+  tree.add(trunk);
+
+  const leafMat = new THREE.MeshStandardMaterial({ color: 0x1f5c33, roughness: 0.8 });
+  const tiers = 3;
+  for (let i = 0; i < tiers; i++) {
+    const coneH = height * 0.5;
+    const coneR = (1 - i * 0.22) * height * 0.32;
+    const cone = new THREE.Mesh(new THREE.ConeGeometry(coneR, coneH, 10), leafMat);
+    cone.position.y = height * 0.25 + i * coneH * 0.42 + coneH / 2;
+    cone.castShadow = true;
+    tree.add(cone);
+  }
+  const starMat = new THREE.MeshStandardMaterial({
+    color: 0xffd65c,
+    emissive: 0xffbf3a,
+    emissiveIntensity: 0.6,
+  });
+  const star = new THREE.Mesh(new THREE.OctahedronGeometry(6), starMat);
+  star.position.y = height * 1.02;
+  tree.add(star);
+
+  tree.position.set(x, -10, z);
+  return tree;
+}
+
+function buildTrees() {
+  const group = new THREE.Group();
+  const positions = [
+    [-560, -180],
+    [-560, 180],
+    [560, -180],
+    [560, 180],
+  ];
+  for (const [x, z] of positions) {
+    group.add(buildTree(x, z, 75 + Math.abs(x + z) % 25));
+  }
+  return group;
+}
+
+// Baut die Mütze als echtes 3D-Objekt (kein LEGO-Design: kein Zylinderkopf,
+// keine Noppen - generische, selbst entworfene Blockfigur).
+function buildHat3D(char, c) {
+  const hat = new THREE.Group();
+  const mainMat = new THREE.MeshStandardMaterial({ color: c.main, roughness: 0.55 });
+  const trimMat = new THREE.MeshStandardMaterial({ color: c.trim, roughness: 0.8 });
+
+  if (char === "nikolaus") {
+    const mitre = new THREE.Mesh(new THREE.ConeGeometry(26, 62, 16), mainMat);
+    mitre.position.y = 31;
+    mitre.castShadow = true;
+    hat.add(mitre);
+    const band = new THREE.Mesh(new THREE.TorusGeometry(27, 7, 10, 20), trimMat);
+    band.rotation.x = Math.PI / 2;
+    band.position.y = 2;
+    hat.add(band);
+    const crossMat = new THREE.MeshStandardMaterial({ color: c.accent, roughness: 0.3, metalness: 0.4 });
+    const vBar = new THREE.Mesh(new THREE.BoxGeometry(4, 34, 4), crossMat);
+    vBar.position.set(0, 30, -24);
+    hat.add(vBar);
+    const hBar = new THREE.Mesh(new THREE.BoxGeometry(16, 4, 4), crossMat);
+    hBar.position.set(0, 38, -24);
+    hat.add(hBar);
+  } else {
+    const cone = new THREE.Mesh(new THREE.ConeGeometry(28, 46, 16), mainMat);
+    cone.position.set(4, 21, 0);
+    cone.rotation.z = -0.18;
+    cone.castShadow = true;
+    hat.add(cone);
+    const band = new THREE.Mesh(new THREE.TorusGeometry(28, 7, 10, 20), trimMat);
+    band.rotation.x = Math.PI / 2;
+    band.position.y = 2;
+    hat.add(band);
+    const pomMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.85 });
+    const pom = new THREE.Mesh(new THREE.SphereGeometry(9, 12, 12), pomMat);
+    pom.position.set(16, 44, 0);
+    hat.add(pom);
+  }
+  return hat;
+}
+
+// Baut eine Spielfigur komplett aus generischen 3D-Grundformen (Box/Kugel/
+// Kegel) - rundem Kopf statt Zylinder, ohne Noppen, ohne Trapez-Torso/Klauen,
+// damit es garantiert kein LEGO-Design ist. side: 1 = links, -1 = rechts
+// (steuert nur, in welcher Hand der Schlaeger sitzt).
+function buildCharacterModel(char, side) {
+  const c = CHAR_COLORS[char];
+  const group = new THREE.Group();
+
+  const torsoMat = new THREE.MeshStandardMaterial({ color: c.main, roughness: 0.55 });
+  const torso = new THREE.Mesh(new THREE.BoxGeometry(72, 62, 50), torsoMat);
+  torso.position.y = 31;
+  torso.castShadow = true;
+  torso.receiveShadow = true;
+  group.add(torso);
+
+  const beltMat = new THREE.MeshStandardMaterial({ color: c.accent, roughness: 0.45 });
+  const belt = new THREE.Mesh(new THREE.BoxGeometry(76, 10, 54), beltMat);
+  belt.position.y = 14;
+  group.add(belt);
+
+  const armMat = new THREE.MeshStandardMaterial({ color: c.main, roughness: 0.55 });
+  const armGeo = new THREE.BoxGeometry(16, 46, 16);
+  const armL = new THREE.Mesh(armGeo, armMat);
+  armL.position.set(-44, 36, 0);
+  armL.castShadow = true;
+  const armR = new THREE.Mesh(armGeo, armMat);
+  armR.position.set(44, 36, 0);
+  armR.castShadow = true;
+  group.add(armL, armR);
+
+  const handMat = new THREE.MeshStandardMaterial({ color: 0xf2f2f2, roughness: 0.7 });
+  const handGeo = new THREE.SphereGeometry(11, 12, 12);
+  const handL = new THREE.Mesh(handGeo, handMat);
+  handL.position.set(-44, 11, 0);
+  const handR = new THREE.Mesh(handGeo, handMat);
+  handR.position.set(44, 11, 0);
+  group.add(handL, handR);
+
+  const headMat = new THREE.MeshStandardMaterial({ color: 0xf2c788, roughness: 0.6 });
+  const head = new THREE.Mesh(new THREE.SphereGeometry(32, 22, 22), headMat);
+  head.position.y = 62 + 32 - 6;
+  head.castShadow = true;
+  group.add(head);
+
+  // Gesicht als Textur (wiederverwendet die 2D-Zeichenroutine) auf einer
+  // Ebene direkt vor dem Kopf, zur Kamera ausgerichtet.
+  const faceCanvas = document.createElement("canvas");
+  faceCanvas.width = 256;
+  faceCanvas.height = 256;
+  drawFaceDetails(faceCanvas.getContext("2d"), 128, 150, 78, char);
+  const faceTex = new THREE.CanvasTexture(faceCanvas);
+  faceTex.colorSpace = THREE.SRGBColorSpace;
+  const faceMat = new THREE.MeshBasicMaterial({ map: faceTex, transparent: true, alphaTest: 0.04 });
+  const facePlane = new THREE.Mesh(new THREE.PlaneGeometry(94, 94), faceMat);
+  facePlane.position.set(0, head.position.y + 6, -31);
+  facePlane.rotation.y = Math.PI;
+  group.add(facePlane);
+
+  const hat = buildHat3D(char, c);
+  hat.position.y = head.position.y + 24;
+  group.add(hat);
+
+  // Tischtennis-Schlaeger in der zum Netz zeigenden Hand
+  const batMat = new THREE.MeshStandardMaterial({ color: 0xc0392b, roughness: 0.4 });
+  const bat = new THREE.Mesh(new THREE.CylinderGeometry(16, 16, 4, 20), batMat);
+  bat.rotation.x = Math.PI / 2;
+  bat.position.set(side * 44, 11, -8);
+  bat.castShadow = true;
+  group.add(bat);
+  const rimMat = new THREE.MeshStandardMaterial({ color: 0x1b1b1b, roughness: 0.5 });
+  const rim = new THREE.Mesh(new THREE.TorusGeometry(16, 2.4, 8, 24), rimMat);
+  rim.rotation.x = Math.PI / 2;
+  rim.position.copy(bat.position);
+  group.add(rim);
+
+  return group;
+}
+
+function disposeObject3D(obj) {
+  obj.traverse((child) => {
+    if (child.geometry) child.geometry.dispose();
+    if (child.material) {
+      const mats = Array.isArray(child.material) ? child.material : [child.material];
+      for (const m of mats) {
+        if (m.map) m.map.dispose();
+        m.dispose();
+      }
+    }
+  });
+}
+
+function buildCharacters() {
+  if (charL) {
+    scene.remove(charL);
+    disposeObject3D(charL);
+  }
+  if (charR) {
+    scene.remove(charR);
+    disposeObject3D(charR);
+  }
+  charL = buildCharacterModel(state.p1Char, 1);
+  charR = buildCharacterModel(state.p2Char, -1);
+  scene.add(charL, charR);
+}
+
 function startGame() {
   canvas = document.getElementById("game-canvas");
-  ctx = canvas.getContext("2d");
-  resizeCanvas();
-  window.addEventListener("resize", resizeCanvas);
+  if (!renderer) initThree();
+  buildCharacters();
 
   document.getElementById("score-name-left").textContent = CHAR_NAMES[state.p1Char];
   document.getElementById("score-name-right").textContent = CHAR_NAMES[state.p2Char];
@@ -396,7 +828,11 @@ function startGame() {
       : "Spieler 1: W/S (links) · Spieler 2: Pfeil hoch/runter (rechts)";
 
   resetMatch();
+  // Erst den Bildschirm sichtbar machen, DANACH die Groesse messen/setzen -
+  // solange #screen-game "display: none" ist, liefert der Wrapper 0 Breite/Hoehe.
   showScreen("game");
+  resizeCanvas();
+  window.addEventListener("resize", resizeCanvas);
   paddleL.y = LOGICAL_H / 2 - paddleL.h / 2;
   paddleR.y = LOGICAL_H / 2 - paddleR.h / 2;
   paused = false;
@@ -425,12 +861,12 @@ function resizeCanvas() {
     h = maxH;
     w = (h * LOGICAL_W) / LOGICAL_H;
   }
-  const dpr = window.devicePixelRatio || 1;
   canvas.style.width = `${w}px`;
   canvas.style.height = `${h}px`;
-  canvas.width = Math.round(LOGICAL_W * dpr);
-  canvas.height = Math.round(LOGICAL_H * dpr);
-  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+  renderer.setSize(w, h, false);
+  camera.aspect = LOGICAL_W / LOGICAL_H;
+  camera.updateProjectionMatrix();
   paddleR.x = LOGICAL_W - 28 - paddleR.w;
 }
 
@@ -690,70 +1126,16 @@ function clamp(v, min, max) {
 
 /* ------------------------------ Zeichnen ------------------------------ */
 function draw() {
-  ctx.clearRect(0, 0, LOGICAL_W, LOGICAL_H);
-
-  // Tisch
-  ctx.fillStyle = "#0e3b24";
-  ctx.fillRect(0, 0, LOGICAL_W, LOGICAL_H);
-
-  // Mittellinie (Netz)
-  ctx.strokeStyle = "#dfe9e2";
-  ctx.lineWidth = 4;
-  ctx.setLineDash([14, 12]);
-  ctx.beginPath();
-  ctx.moveTo(LOGICAL_W / 2, 6);
-  ctx.lineTo(LOGICAL_W / 2, LOGICAL_H - 6);
-  ctx.stroke();
-  ctx.setLineDash([]);
-
-  // Spielfeldrand
-  ctx.strokeStyle = "#c6d6cd";
-  ctx.lineWidth = 6;
-  ctx.strokeRect(3, 3, LOGICAL_W - 6, LOGICAL_H - 6);
-
-  drawPaddle(paddleL, state.p1Char, 1);
-  drawPaddle(paddleR, state.p2Char, -1);
-
-  // Ball (wie ein Tischtennisball)
-  ctx.save();
-  ctx.translate(ball.x, ball.y);
-  const grad = ctx.createRadialGradient(-ball.r * 0.3, -ball.r * 0.3, 1, 0, 0, ball.r);
-  grad.addColorStop(0, "#ffffff");
-  grad.addColorStop(1, "#dfe3e6");
-  ctx.fillStyle = grad;
-  ctx.beginPath();
-  ctx.arc(0, 0, ball.r, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.strokeStyle = "#c0392b55";
-  ctx.lineWidth = 1.5;
-  ctx.beginPath();
-  ctx.arc(0, 0, ball.r - 1, 0.3, 1.8);
-  ctx.stroke();
-  ctx.restore();
-}
-
-function drawPaddle(paddle, char, facing) {
-  const c = CHAR_COLORS[char];
-  ctx.save();
-  ctx.fillStyle = c.main;
-  roundRect(ctx, paddle.x, paddle.y, paddle.w, paddle.h, 7);
-  ctx.fill();
-  ctx.fillStyle = c.trim;
-  roundRect(ctx, paddle.x + (facing > 0 ? paddle.w - 4 : 0), paddle.y + 6, 4, paddle.h - 12, 2);
-  ctx.fill();
-  ctx.restore();
-
-  const headX = facing > 0 ? paddle.x - 18 : paddle.x + paddle.w + 18;
-  const headY = paddle.y + paddle.h / 2;
-  drawCharacterBust(ctx, headX, headY, 22, char);
-}
-
-function roundRect(context, x, y, w, h, r) {
-  context.beginPath();
-  context.moveTo(x + r, y);
-  context.arcTo(x + w, y, x + w, y + h, r);
-  context.arcTo(x + w, y + h, x, y + h, r);
-  context.arcTo(x, y + h, x, y, r);
-  context.arcTo(x, y, x + w, y, r);
-  context.closePath();
+  if (charL) {
+    charL.position.set(worldX(paddleL.x + paddleL.w / 2), 0, worldZ(paddleL.y + paddleL.h / 2));
+  }
+  if (charR) {
+    charR.position.set(worldX(paddleR.x + paddleR.w / 2), 0, worldZ(paddleR.y + paddleR.h / 2));
+  }
+  if (ballMesh) {
+    const progress = clamp(ball.x / LOGICAL_W, 0, 1);
+    const arc = BALL_ARC_HEIGHT * Math.sin(Math.PI * progress);
+    ballMesh.position.set(worldX(ball.x), BALL_VISUAL_R + arc, worldZ(ball.y));
+  }
+  renderer.render(scene, camera);
 }
