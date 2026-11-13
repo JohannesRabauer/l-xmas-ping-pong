@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<title>Nikolaus gegen Weihnachtsmann - Tischtennis</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🏓</text></svg>">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Mountains+of+Christmas:wght@700&family=Baloo+2:wght@500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div id="snowfall-css" aria-hidden="true">
+  <div class="flakes flakes-1"></div>
+  <div class="flakes flakes-2"></div>
+  <div class="flakes flakes-3"></div>
+</div>
+<div id="app">
+
+  <!-- START / MODE SELECT -->
+  <section id="screen-mode" class="screen active">
+    <div class="title-badge">🔔</div>
+    <h1>🎄 Nikolaus gegen Weihnachtsmann 🏓</h1>
+    <h2>Tischtennis</h2>
+    <p class="subtitle">Wie möchtest du spielen?</p>
+    <div class="menu-buttons">
+      <button class="big-btn" data-players="1">🧑 1 Spieler<br><span>gegen den Computer</span></button>
+      <button class="big-btn" data-players="2">🧑‍🤝‍🧑 2 Spieler<br><span>gegen Freund / Bruder</span></button>
+    </div>
+  </section>
+
+  <!-- CHARACTER SELECT PLAYER 1 -->
+  <section id="screen-char1" class="screen">
+    <h2 id="char1-title">Spieler 1: Wähle deine Figur</h2>
+    <div class="char-choices">
+      <button class="char-btn" data-char="nikolaus">
+        <canvas class="char-preview" data-preview="nikolaus" width="160" height="160"></canvas>
+        <span>Nikolaus</span>
+      </button>
+      <button class="char-btn" data-char="weihnachtsmann">
+        <canvas class="char-preview" data-preview="weihnachtsmann" width="160" height="160"></canvas>
+        <span>Weihnachtsmann</span>
+      </button>
+    </div>
+  </section>
+
+  <!-- CHARACTER SELECT PLAYER 2 -->
+  <section id="screen-char2" class="screen">
+    <h2>Spieler 2: Wähle deine Figur</h2>
+    <div class="char-choices">
+      <button class="char-btn" data-char="nikolaus">
+        <canvas class="char-preview" data-preview="nikolaus" width="160" height="160"></canvas>
+        <span>Nikolaus</span>
+      </button>
+      <button class="char-btn" data-char="weihnachtsmann">
+        <canvas class="char-preview" data-preview="weihnachtsmann" width="160" height="160"></canvas>
+        <span>Weihnachtsmann</span>
+      </button>
+    </div>
+  </section>
+
+  <!-- GAME SCREEN -->
+  <section id="screen-game" class="screen">
+    <div id="scoreboard">
+      <span id="score-name-left">Spieler 1</span>
+      <span id="score-left">0</span>
+      <span class="score-sep">:</span>
+      <span id="score-right">0</span>
+      <span id="score-name-right">Spieler 2</span>
+    </div>
+    <div id="game-wrap">
+      <canvas id="game-canvas"></canvas>
+      <div id="countdown"></div>
+      <div id="win-overlay" class="hidden">
+        <div class="win-trophy">🏆</div>
+        <div id="win-text"></div>
+        <button id="btn-again" class="big-btn">🔄 Nochmal spielen</button>
+        <button id="btn-menu" class="big-btn secondary">🏠 Zum Startbildschirm</button>
+      </div>
+      <button id="btn-pause" title="Pause">⏸</button>
+    </div>
+    <p class="hint" id="controls-hint"></p>
+  </section>
+
+</div>
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js"
+  }
+}
+</script>
+<script type="module" src="game.js"></script>
+</body>
+</html>

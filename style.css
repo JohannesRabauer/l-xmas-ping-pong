@@ -1,0 +1,364 @@
+:root {
+  --bg-dark: #0b2e1d;
+  --bg-darker: #071e13;
+  --red: #c0392b;
+  --red-dark: #8e2a20;
+  --green: #1e8449;
+  --snow: #f5f7fa;
+  --gold: #f1c40f;
+  --gold-dark: #b8860b;
+  color-scheme: dark;
+}
+
+* {
+  box-sizing: border-box;
+  -webkit-tap-highlight-color: transparent;
+}
+
+html, body {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  overscroll-behavior: none;
+}
+
+body {
+  font-family: "Baloo 2", "Segoe UI", Verdana, Tahoma, sans-serif;
+  background:
+    radial-gradient(circle at 50% -10%, #1a5234 0%, transparent 55%),
+    radial-gradient(circle at 50% 0%, #103a24, var(--bg-darker) 70%);
+  color: var(--snow);
+  min-height: 100%;
+  min-height: 100dvh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  touch-action: none;
+  overflow: hidden;
+  position: relative;
+}
+
+/* Rein dekorativer CSS-Schneefall im Hintergrund (Mehrfach-box-shadow-Trick),
+   laeuft unabhaengig von der 3D-Szene und fuellt auch die "leeren" Bereiche
+   der Menues sowie den Letterbox-Rand des Spielfelds auf schmalen Bildschirmen. */
+#snowfall-css {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  overflow: hidden;
+}
+
+.flakes {
+  position: absolute;
+  top: -10px;
+  left: 0;
+  width: 2px;
+  height: 2px;
+  background: transparent;
+  border-radius: 50%;
+  animation: flakes-fall linear infinite;
+}
+
+.flakes-1 {
+  box-shadow:
+    5vw 0 #fff, 15vw 0 #fff, 25vw 0 #fff, 35vw 0 #fff, 45vw 0 #fff,
+    55vw 0 #fff, 65vw 0 #fff, 75vw 0 #fff, 85vw 0 #fff, 95vw 0 #fff;
+  animation-duration: 11s;
+  opacity: 0.8;
+}
+
+.flakes-2 {
+  box-shadow:
+    2vw 0 #fff, 12vw 0 #fff, 22vw 0 #fff, 32vw 0 #fff, 42vw 0 #fff,
+    52vw 0 #fff, 62vw 0 #fff, 72vw 0 #fff, 82vw 0 #fff, 92vw 0 #fff;
+  animation-duration: 15s;
+  animation-delay: -4s;
+  opacity: 0.55;
+}
+
+.flakes-3 {
+  box-shadow:
+    8vw 0 #fff, 18vw 0 #fff, 28vw 0 #fff, 38vw 0 #fff, 48vw 0 #fff,
+    58vw 0 #fff, 68vw 0 #fff, 78vw 0 #fff, 88vw 0 #fff, 98vw 0 #fff;
+  animation-duration: 19s;
+  animation-delay: -9s;
+  opacity: 0.35;
+}
+
+@keyframes flakes-fall {
+  from { transform: translateY(-10px); }
+  to { transform: translateY(110vh); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .flakes { animation: none; display: none; }
+}
+
+#app {
+  width: 100%;
+  height: 100%;
+  height: 100dvh;
+  position: relative;
+  z-index: 1;
+}
+
+.screen {
+  display: none;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  width: 100%;
+  height: 100%;
+  padding: 16px;
+  text-align: center;
+}
+
+.screen.active {
+  display: flex;
+}
+
+.title-badge {
+  font-size: clamp(1.6rem, 6vw, 2.4rem);
+  animation: badge-swing 2.6s ease-in-out infinite;
+  transform-origin: top center;
+}
+
+@keyframes badge-swing {
+  0%, 100% { transform: rotate(-8deg); }
+  50% { transform: rotate(8deg); }
+}
+
+h1 {
+  font-family: "Mountains of Christmas", "Baloo 2", cursive;
+  font-size: clamp(1.6rem, 6vw, 2.8rem);
+  margin: 0;
+  color: var(--gold);
+  text-shadow: 0 2px 0 #000, 0 4px 14px rgba(0, 0, 0, 0.6);
+}
+
+h2 {
+  font-family: "Mountains of Christmas", "Baloo 2", cursive;
+  font-size: clamp(1.2rem, 4.5vw, 1.8rem);
+  margin: 0 0 6px 0;
+}
+
+.subtitle {
+  margin: 0 0 10px 0;
+  opacity: 0.85;
+}
+
+.menu-buttons, .char-choices {
+  display: flex;
+  gap: 16px;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.big-btn {
+  background: linear-gradient(180deg, var(--red) 0%, var(--red-dark) 100%);
+  border: 3px solid var(--gold);
+  color: var(--snow);
+  font-family: inherit;
+  font-size: clamp(0.95rem, 3vw, 1.2rem);
+  font-weight: 700;
+  padding: 16px 22px;
+  border-radius: 16px;
+  cursor: pointer;
+  min-width: 150px;
+  box-shadow: 0 6px 0 #5e1a13, 0 10px 18px rgba(0,0,0,0.4);
+  transition: transform 0.08s ease, box-shadow 0.08s ease, filter 0.15s ease;
+  touch-action: manipulation;
+}
+
+.big-btn span {
+  font-weight: 400;
+  font-size: 0.75em;
+  opacity: 0.85;
+}
+
+@media (hover: hover) {
+  .big-btn:hover {
+    filter: brightness(1.12);
+    transform: translateY(-2px);
+    box-shadow: 0 8px 0 #5e1a13, 0 14px 22px rgba(0,0,0,0.45);
+  }
+  .char-btn:hover {
+    border-color: var(--gold);
+    filter: brightness(1.1);
+  }
+}
+
+.big-btn:active {
+  transform: translateY(4px);
+  box-shadow: 0 2px 0 #5e1a13, 0 4px 10px rgba(0,0,0,0.4);
+}
+
+.big-btn.secondary {
+  background: linear-gradient(180deg, #2c3e50, #1b2631);
+  border-color: #95a5a6;
+  box-shadow: 0 6px 0 #10151a, 0 10px 18px rgba(0,0,0,0.4);
+}
+
+.char-btn {
+  background: linear-gradient(180deg, #11462c, #0a2e1c);
+  border: 3px solid var(--green);
+  border-radius: 18px;
+  padding: 12px;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  color: var(--snow);
+  font-family: inherit;
+  font-size: 1rem;
+  font-weight: 600;
+  touch-action: manipulation;
+  transition: transform 0.1s ease, border-color 0.15s ease, filter 0.15s ease;
+  box-shadow: 0 6px 16px rgba(0,0,0,0.35);
+}
+
+.char-btn:active {
+  transform: scale(0.96);
+}
+
+.char-preview {
+  width: 110px;
+  height: 110px;
+  background: radial-gradient(circle at 50% 35%, #ffffff22, #ffffff08 70%);
+  border-radius: 14px;
+}
+
+#scoreboard {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  font-size: clamp(1rem, 3.6vw, 1.6rem);
+  font-weight: 700;
+  width: 100%;
+  max-width: 640px;
+  padding: 8px 18px;
+  text-shadow: 0 2px 4px #000;
+  flex-wrap: nowrap;
+  background: linear-gradient(180deg, #ffffff12, #ffffff05);
+  border: 2px solid var(--gold-dark);
+  border-radius: 999px;
+  box-shadow: 0 4px 14px rgba(0,0,0,0.35);
+}
+
+#scoreboard span {
+  white-space: nowrap;
+}
+
+.score-sep {
+  opacity: 0.7;
+}
+
+#score-left, #score-right {
+  background: linear-gradient(180deg, var(--red) 0%, var(--red-dark) 100%);
+  border: 1px solid var(--gold);
+  padding: 2px 12px;
+  border-radius: 8px;
+  min-width: 1.4em;
+}
+
+#game-wrap {
+  position: relative;
+  width: 100%;
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 0;
+}
+
+#game-canvas {
+  background: #0a2a1a;
+  border: 3px solid #c6d6cd;
+  border-radius: 10px;
+  touch-action: none;
+  max-width: 100%;
+  max-height: 100%;
+  box-shadow: 0 8px 30px rgba(0,0,0,0.5);
+}
+
+#countdown {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  font-family: "Mountains of Christmas", cursive;
+  font-size: clamp(2.5rem, 10vw, 5rem);
+  font-weight: 800;
+  color: var(--gold);
+  text-shadow: 0 4px 10px #000;
+  pointer-events: none;
+}
+
+#win-overlay {
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(circle at 50% 30%, rgba(26, 82, 52, 0.92), rgba(5, 20, 12, 0.94));
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  border-radius: 10px;
+  padding: 16px;
+}
+
+#win-overlay.hidden {
+  display: none;
+}
+
+.win-trophy {
+  font-size: clamp(2.4rem, 9vw, 4rem);
+  animation: trophy-pop 0.5s ease-out;
+}
+
+@keyframes trophy-pop {
+  0% { transform: scale(0.3) rotate(-10deg); opacity: 0; }
+  70% { transform: scale(1.15) rotate(4deg); opacity: 1; }
+  100% { transform: scale(1) rotate(0); }
+}
+
+#win-text {
+  font-family: "Mountains of Christmas", cursive;
+  font-size: clamp(1.5rem, 6vw, 2.6rem);
+  font-weight: 800;
+  color: var(--gold);
+  text-align: center;
+  text-shadow: 0 3px 8px #000;
+}
+
+#btn-pause {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  background: #00000055;
+  color: var(--snow);
+  border: 2px solid #ffffff55;
+  border-radius: 50%;
+  width: 40px;
+  height: 40px;
+  font-size: 1.1rem;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+
+.hint {
+  margin: 4px 0 0 0;
+  font-size: 0.75rem;
+  opacity: 0.7;
+  text-align: center;
+}
+
+@media (max-width: 480px) {
+  .char-preview { width: 90px; height: 90px; }
+  .big-btn { min-width: 130px; padding: 14px 16px; }
+  #scoreboard { padding: 6px 12px; }
+}
