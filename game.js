@@ -446,6 +446,9 @@ function sfxScore() {
 function sfxWin() {
   [523.25, 659.25, 783.99, 1046.5].forEach((f, i) => playTone(f, 0.3, "triangle", 0.2, i * 0.14));
 }
+function sfxPresent() {
+  [660, 990].forEach((f, i) => playTone(f, 0.16, "triangle", 0.2, i * 0.09));
+}
 
 /* ------------------------------ Spiel -------------------------------- */
 const WIN_SCORE = 5;
@@ -461,12 +464,36 @@ let paused = false;
 let gameOver = false;
 let countdownActive = false;
 
+const PADDLE_H_BASE = 95;
+const PADDLE_H_BOOST = 150; // Schlaeger-Hoehe waehrend des Geschenk-Power-ups
+const POWERUP_DURATION = 7; // Sekunden, die der Power-up-Bonus anhaelt
+
 const ball = { x: 0, y: 0, vx: 0, vy: 0, r: 11, speed: 6.2 };
-const paddleL = { x: 28, y: 0, w: 16, h: 95, vy: 0 };
-const paddleR = { x: 0, y: 0, w: 16, h: 95, vy: 0 };
+const paddleL = { x: 28, y: 0, w: 16, h: PADDLE_H_BASE, vy: 0 };
+const paddleR = { x: 0, y: 0, w: 16, h: PADDLE_H_BASE, vy: 0 };
 const PADDLE_SPEED = 430; // px/sec logical
 const BOT_MAX_SPEED = 330;
 const scores = { left: 0, right: 0 };
+
+// Rein kosmetischer Animationszustand je Figur (Lauf-/Schwung-Phase, Treffer-
+// Timer) - beeinflusst nur draw(), nicht die Physik oben.
+const animL = { walkPhase: 0, hitTimer: 0 };
+const animR = { walkPhase: 0, hitTimer: 0 };
+let prevPaddleLY = paddleL.y;
+let prevPaddleRY = paddleR.y;
+let lastHitSide = null; // "left" | "right" | null - wer den Ball zuletzt getroffen hat
+let boostTimerL = 0; // restliche Sekunden Schlaeger-Boost links
+let boostTimerR = 0; // restliche Sekunden Schlaeger-Boost rechts
+
+// Zufaellig auftauchendes Geschenk als kleines Power-up: wer es mit dem Ball
+// trifft, bekommt fuer POWERUP_DURATION Sekunden einen laengeren Schlaeger.
+const present = { x: 0, y: 0, r: 26, active: false };
+let presentMesh = null;
+let presentSpawnTimer = 6;
+
+function randRange(min, max) {
+  return min + Math.random() * (max - min);
+}
 
 // Rechnet die flache Spiellogik-Koordinate (x: 0..LOGICAL_W, y: 0..LOGICAL_H)
 // in 3D-Weltkoordinaten um (X bleibt links/rechts, die Logik-Y-Achse wird zur
@@ -526,6 +553,8 @@ function initThree() {
   scene.add(buildTrees());
   snowPoints = buildSnowfall();
   scene.add(snowPoints);
+  presentMesh = buildPresentMesh();
+  scene.add(presentMesh);
 
   const ballMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.35 });
   ballMesh = new THREE.Mesh(new THREE.SphereGeometry(BALL_VISUAL_R, 20, 20), ballMat);
@@ -693,47 +722,122 @@ function buildTrees() {
 }
 
 // Stimmungsvoller Schneefall im Hintergrund: ein einzelnes Points-Objekt mit
-// vielen kleinen Schneeflocken, die ueber der Szene langsam herabfallen und
-// unten wieder nach oben "recycled" werden (rein kosmetisch).
+// vielen kleinen Schneeflocken. WICHTIG: Unter der fast senkrechten
+// Vogelperspektive (Orthographic-Kamera) erzeugt eine reine Y-Bewegung
+// (Hoehe) kaum sichtbare Bildschirmbewegung - eine orthographische Kamera
+// kennt keine perspektivische Tiefenwirkung, daher wuerde "echtes" Fallen
+// entlang der Welt-Y-Achse nur extrem langsam ueber den Bildschirm "treiben"
+// statt sichtbar zu fallen. Deshalb wird die Fallbewegung hier zusaetzlich
+// ueber Punktgroesse/Deckkraft dargestellt (grosse, helle Flocke = hoch oben/
+// nah an der Kamera, kleine, verblassende Flocke = kurz vorm Boden) - ein in
+// Top-Down-Spielen uebliches Kunstgriff, damit "von oben kommend, zu Boden
+// fallend" trotzdem klar erkennbar ist. Ein eigener Shader wird benoetigt,
+// weil THREE.PointsMaterial.sizeAttenuation bei orthographischen Kameras
+// bewusst deaktiviert ist (kein Tiefen-Bezug dort).
 let snowPositions = null;
 let snowSpeeds = null;
+let snowDrift = null;
 function buildSnowfall() {
   const count = 260;
-  const spread = 1400;
-  const topY = 500;
-  const bottomY = -180;
+  const spread = 1800;
+  const topY = 520;
+  const floorY = -6;
   const geo = new THREE.BufferGeometry();
   snowPositions = new Float32Array(count * 3);
   snowSpeeds = new Float32Array(count);
+  snowDrift = new Float32Array(count);
   for (let i = 0; i < count; i++) {
     snowPositions[i * 3] = (Math.random() - 0.5) * spread;
-    snowPositions[i * 3 + 1] = bottomY + Math.random() * (topY - bottomY);
+    snowPositions[i * 3 + 1] = floorY + Math.random() * (topY - floorY);
     snowPositions[i * 3 + 2] = (Math.random() - 0.5) * spread;
-    snowSpeeds[i] = 16 + Math.random() * 28;
+    snowSpeeds[i] = 34 + Math.random() * 46;
+    snowDrift[i] = Math.random() * Math.PI * 2;
   }
   geo.setAttribute("position", new THREE.BufferAttribute(snowPositions, 3));
-  const mat = new THREE.PointsMaterial({
-    color: 0xffffff,
-    size: 5,
+  const mat = new THREE.ShaderMaterial({
     transparent: true,
-    opacity: 0.85,
     depthWrite: false,
+    uniforms: {
+      uTopY: { value: topY },
+      uFloorY: { value: floorY },
+      uPixelRatio: { value: Math.min(window.devicePixelRatio || 1, 2) },
+    },
+    vertexShader: `
+      uniform float uTopY;
+      uniform float uFloorY;
+      uniform float uPixelRatio;
+      varying float vAlpha;
+      void main() {
+        vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
+        gl_Position = projectionMatrix * mvPosition;
+        float h = clamp((position.y - uFloorY) / (uTopY - uFloorY), 0.0, 1.0);
+        gl_PointSize = mix(2.0, 8.5, h) * uPixelRatio;
+        vAlpha = mix(0.08, 0.9, h);
+      }
+    `,
+    fragmentShader: `
+      varying float vAlpha;
+      void main() {
+        vec2 c = gl_PointCoord - vec2(0.5);
+        float d = length(c);
+        if (d > 0.5) discard;
+        float soft = smoothstep(0.5, 0.1, d);
+        gl_FragColor = vec4(1.0, 1.0, 1.0, vAlpha * soft);
+      }
+    `,
   });
   const points = new THREE.Points(geo, mat);
   points.userData.topY = topY;
-  points.userData.bottomY = bottomY;
+  points.userData.floorY = floorY;
+  points.userData.spread = spread;
   return points;
 }
 
 function updateSnowfall(dt, snow) {
   if (!snow || !snowPositions) return;
   const pos = snow.geometry.attributes.position.array;
-  const { topY, bottomY } = snow.userData;
+  const { topY, floorY, spread } = snow.userData;
+  const t = performance.now() / 1000;
   for (let i = 0; i < snowSpeeds.length; i++) {
-    pos[i * 3 + 1] -= snowSpeeds[i] * dt;
-    if (pos[i * 3 + 1] < bottomY) pos[i * 3 + 1] = topY;
+    pos[i * 3 + 1] -= snowSpeeds[i] * dt; // faellt Richtung Boden
+    pos[i * 3] += Math.sin(t * 0.6 + snowDrift[i]) * 5 * dt; // leichtes Treiben
+    if (pos[i * 3 + 1] < floorY) {
+      pos[i * 3 + 1] = topY;
+      pos[i * 3] = (Math.random() - 0.5) * spread;
+      pos[i * 3 + 2] = (Math.random() - 0.5) * spread;
+    }
   }
   snow.geometry.attributes.position.needsUpdate = true;
+}
+
+// Baut ein kleines Geschenk (Pappschachtel + Schleife) als zufaellig
+// auftauchendes Power-up - rein generisch gestaltet, keine Markenbezuege.
+function buildPresentMesh() {
+  const group = new THREE.Group();
+  const boxMat = new THREE.MeshStandardMaterial({ color: 0xc0392b, roughness: 0.45 });
+  const box = new THREE.Mesh(new THREE.BoxGeometry(34, 30, 34), boxMat);
+  box.position.y = 15;
+  box.castShadow = true;
+  group.add(box);
+  const ribbonMat = new THREE.MeshStandardMaterial({ color: 0xffe9a8, roughness: 0.3, metalness: 0.35 });
+  const ribbonX = new THREE.Mesh(new THREE.BoxGeometry(38, 32, 7), ribbonMat);
+  ribbonX.position.y = 15;
+  group.add(ribbonX);
+  const ribbonZ = new THREE.Mesh(new THREE.BoxGeometry(7, 32, 38), ribbonMat);
+  ribbonZ.position.y = 15;
+  group.add(ribbonZ);
+  const bowGeo = new THREE.SphereGeometry(7, 10, 10);
+  const bowL = new THREE.Mesh(bowGeo, ribbonMat);
+  bowL.position.set(-8, 32, 0);
+  bowL.scale.set(1, 0.7, 1.4);
+  const bowR = bowL.clone();
+  bowR.position.x = 8;
+  group.add(bowL, bowR);
+  group.traverse((child) => {
+    if (child.isMesh) child.castShadow = true;
+  });
+  group.visible = false;
+  return group;
 }
 
 // Baut die Mütze als echtes 3D-Objekt (kein LEGO-Design: kein Zylinderkopf,
@@ -818,28 +922,49 @@ function buildCharacterModel(char, side) {
   group.add(buckle);
 
   // --- Arme: weiche Kapseln statt Kaesten, mit runden "Fausthandschuh"-
-  // Haenden statt Klauen. ---
+  // Haenden statt Klauen. Jeder Arm haengt an einem eigenen Dreh-Pivot an
+  // der Schulter, damit er sich beim Laufen/Schlagen glaubhaft um die
+  // Schulter schwingen laesst (statt nur der Kapsel-Mesh selbst zu drehen,
+  // was Hand/Schlaeger zurueckliesse). ---
   const armMat = new THREE.MeshStandardMaterial({ color: c.main, roughness: 0.5 });
   const armGeo = new THREE.CapsuleGeometry(9, 32, 6, 12);
-  const armL = new THREE.Mesh(armGeo, armMat);
-  armL.position.set(-41, 38, 0);
-  armL.rotation.z = 0.12;
-  armL.castShadow = true;
-  const armR = new THREE.Mesh(armGeo, armMat);
-  armR.position.set(41, 38, 0);
-  armR.rotation.z = -0.12;
-  armR.castShadow = true;
-  group.add(armL, armR);
-
   const handMat = new THREE.MeshStandardMaterial({ color: 0xf7f7f7, roughness: 0.65 });
   const handGeo = new THREE.SphereGeometry(12, 14, 14);
-  const handL = new THREE.Mesh(handGeo, handMat);
-  handL.position.set(-43, 16, 0);
-  const handR = new THREE.Mesh(handGeo, handMat);
-  handR.position.set(43, 16, 0);
-  handL.castShadow = true;
-  handR.castShadow = true;
-  group.add(handL, handR);
+  const batMat = new THREE.MeshStandardMaterial({ color: 0xc0392b, roughness: 0.35 });
+  const rimMat = new THREE.MeshStandardMaterial({ color: 0x1b1b1b, roughness: 0.5 });
+
+  // side: 1 = Schlaeger in der rechten Hand (Figur steht links, Netz rechts),
+  // -1 = Schlaeger in der linken Hand.
+  function buildArmPivot(sx, isBatArm) {
+    const pivot = new THREE.Group();
+    pivot.position.set(sx * 41, 58, 0);
+    const capsule = new THREE.Mesh(armGeo, armMat);
+    capsule.position.set(0, -20, 0);
+    capsule.rotation.z = sx > 0 ? -0.12 : 0.12;
+    capsule.castShadow = true;
+    pivot.add(capsule);
+    const hand = new THREE.Mesh(handGeo, handMat);
+    hand.position.set(sx * 2, -42, 0);
+    hand.castShadow = true;
+    pivot.add(hand);
+    if (isBatArm) {
+      const bat = new THREE.Mesh(new THREE.CylinderGeometry(16, 16, 4, 24), batMat);
+      bat.rotation.x = Math.PI / 2;
+      bat.position.set(sx * 2, -42, -8);
+      bat.castShadow = true;
+      pivot.add(bat);
+      const rim = new THREE.Mesh(new THREE.TorusGeometry(16, 2.4, 8, 24), rimMat);
+      rim.rotation.x = Math.PI / 2;
+      rim.position.copy(bat.position);
+      pivot.add(rim);
+    }
+    return pivot;
+  }
+  const armPivotL = buildArmPivot(-1, side === -1);
+  const armPivotR = buildArmPivot(1, side === 1);
+  group.add(armPivotL, armPivotR);
+  group.userData.armBat = side === 1 ? armPivotR : armPivotL;
+  group.userData.armOther = side === 1 ? armPivotL : armPivotR;
 
   // --- Fuesse: kleine, flache runde Stiefel statt Beinen - geben der
   // Figur einen stabilen, "geerdeten" Stand von oben betrachtet. ---
@@ -878,19 +1003,6 @@ function buildCharacterModel(char, side) {
   const hat = buildHat3D(char, c);
   hat.position.y = head.position.y + 24;
   group.add(hat);
-
-  // Tischtennis-Schlaeger in der zum Netz zeigenden Hand
-  const batMat = new THREE.MeshStandardMaterial({ color: 0xc0392b, roughness: 0.35 });
-  const bat = new THREE.Mesh(new THREE.CylinderGeometry(16, 16, 4, 24), batMat);
-  bat.rotation.x = Math.PI / 2;
-  bat.position.set(side * 43, 16, -8);
-  bat.castShadow = true;
-  group.add(bat);
-  const rimMat = new THREE.MeshStandardMaterial({ color: 0x1b1b1b, roughness: 0.5 });
-  const rim = new THREE.Mesh(new THREE.TorusGeometry(16, 2.4, 8, 24), rimMat);
-  rim.rotation.x = Math.PI / 2;
-  rim.position.copy(bat.position);
-  group.add(rim);
 
   return group;
 }
@@ -960,6 +1072,18 @@ function resetMatch() {
   scores.right = 0;
   updateScoreboard();
   gameOver = false;
+  present.active = false;
+  if (presentMesh) presentMesh.visible = false;
+  presentSpawnTimer = randRange(6, 9);
+  boostTimerL = 0;
+  boostTimerR = 0;
+  lastHitSide = null;
+  paddleL.h = PADDLE_H_BASE;
+  paddleR.h = PADDLE_H_BASE;
+  animL.walkPhase = 0;
+  animR.walkPhase = 0;
+  animL.hitTimer = 0;
+  animR.hitTimer = 0;
 }
 
 function resizeCanvas() {
@@ -987,22 +1111,29 @@ function updateScoreboard() {
 }
 
 /* --------------------------- Eingabe -------------------------------- */
+// Handler-Referenzen werden hier gemerkt, damit detachControls() sie exakt
+// wieder entfernen kann (addEventListener statt onX-Zuweisung - robuster
+// bei wiederholtem attachControls()/detachControls() ueber mehrere
+// startGame()-Aufrufe hinweg, z.B. bei "Nochmal spielen").
+let controlHandlers = null;
+
 function attachControls() {
-  window.onkeydown = (e) => {
+  const wrap = document.getElementById("game-wrap");
+
+  const onKeyDown = (e) => {
     if (["w", "W"].includes(e.key)) input.wDown = true;
     if (["s", "S"].includes(e.key)) input.sDown = true;
     if (e.key === "ArrowUp") { input.upDown = true; e.preventDefault(); }
     if (e.key === "ArrowDown") { input.downDown = true; e.preventDefault(); }
     if (e.key === " " || e.key === "Escape") { togglePause(); e.preventDefault(); }
   };
-  window.onkeyup = (e) => {
+  const onKeyUp = (e) => {
     if (["w", "W"].includes(e.key)) input.wDown = false;
     if (["s", "S"].includes(e.key)) input.sDown = false;
     if (e.key === "ArrowUp") input.upDown = false;
     if (e.key === "ArrowDown") input.downDown = false;
   };
 
-  const wrap = document.getElementById("game-wrap");
   const handleTouch = (e) => {
     const rect = canvas.getBoundingClientRect();
     input.touchLeftY = null;
@@ -1015,9 +1146,7 @@ function attachControls() {
     }
     e.preventDefault();
   };
-  wrap.ontouchstart = handleTouch;
-  wrap.ontouchmove = handleTouch;
-  wrap.ontouchend = (e) => {
+  const onTouchEnd = (e) => {
     if (e.touches.length === 0) {
       input.touchLeftY = null;
       input.touchRightY = null;
@@ -1027,7 +1156,7 @@ function attachControls() {
   };
 
   // Maus-Unterstützung (Desktop): linke Haelfte = Spieler 1 ziehen
-  wrap.onmousemove = (e) => {
+  const onMouseMove = (e) => {
     if (!e.buttons) return;
     const rect = canvas.getBoundingClientRect();
     const relX = e.clientX - rect.left;
@@ -1035,23 +1164,42 @@ function attachControls() {
     if (relX < rect.width / 2) input.touchLeftY = relY;
     else if (state.players === 2) input.touchRightY = relY;
   };
-  wrap.onmouseleave = () => {
+  const onMouseLeave = () => {
     input.touchLeftY = null;
     input.touchRightY = null;
   };
   // Beim Loslassen der Maustaste die Maussteuerung wieder freigeben, sonst
   // bliebe die zuletzt gezogene Position fuer immer "eingerastet" und
   // blockiert danach die Tastatursteuerung (input.touchLeftY !== null).
-  window.onmouseup = () => {
+  const onMouseUp = () => {
     input.touchLeftY = null;
     input.touchRightY = null;
   };
+
+  controlHandlers = { wrap, onKeyDown, onKeyUp, handleTouch, onTouchEnd, onMouseMove, onMouseLeave, onMouseUp };
+
+  window.addEventListener("keydown", onKeyDown);
+  window.addEventListener("keyup", onKeyUp);
+  wrap.addEventListener("touchstart", handleTouch, { passive: false });
+  wrap.addEventListener("touchmove", handleTouch, { passive: false });
+  wrap.addEventListener("touchend", onTouchEnd, { passive: false });
+  wrap.addEventListener("mousemove", onMouseMove);
+  wrap.addEventListener("mouseleave", onMouseLeave);
+  window.addEventListener("mouseup", onMouseUp);
 }
 
 function detachControls() {
-  window.onkeydown = null;
-  window.onkeyup = null;
-  window.onmouseup = null;
+  if (!controlHandlers) return;
+  const { wrap, onKeyDown, onKeyUp, handleTouch, onTouchEnd, onMouseMove, onMouseLeave, onMouseUp } = controlHandlers;
+  window.removeEventListener("keydown", onKeyDown);
+  window.removeEventListener("keyup", onKeyUp);
+  wrap.removeEventListener("touchstart", handleTouch, { passive: false });
+  wrap.removeEventListener("touchmove", handleTouch, { passive: false });
+  wrap.removeEventListener("touchend", onTouchEnd, { passive: false });
+  wrap.removeEventListener("mousemove", onMouseMove);
+  wrap.removeEventListener("mouseleave", onMouseLeave);
+  window.removeEventListener("mouseup", onMouseUp);
+  controlHandlers = null;
 }
 
 /* --------------------------- Spiellogik ------------------------------ */
@@ -1133,6 +1281,22 @@ function loop(ts) {
 }
 
 function update(dt) {
+  // Geschenk-Power-up anwenden: waehrend boostTimer > 0 ist der jeweilige
+  // Schlaeger (Trefferflaeche) groesser - rein additiv, aendert sonst nichts
+  // an der bestehenden Physik/Logik.
+  if (boostTimerL > 0) {
+    boostTimerL = Math.max(0, boostTimerL - dt);
+    paddleL.h = PADDLE_H_BOOST;
+  } else {
+    paddleL.h = PADDLE_H_BASE;
+  }
+  if (boostTimerR > 0) {
+    boostTimerR = Math.max(0, boostTimerR - dt);
+    paddleR.h = PADDLE_H_BOOST;
+  } else {
+    paddleR.h = PADDLE_H_BASE;
+  }
+
   // --- Spieler 1 (links) ---
   if (input.touchLeftY !== null) {
     const target = input.touchLeftY - paddleL.h / 2;
@@ -1157,6 +1321,18 @@ function update(dt) {
   }
   paddleR.y = clamp(paddleR.y, 0, LOGICAL_H - paddleR.h);
 
+  // Rein kosmetische Figuren-Animation: erkennt Bewegung anhand der
+  // tatsaechlichen Position (funktioniert fuer Tastatur, Touch UND Bot
+  // gleichermassen) und steuert damit Lauf-Bob/Arm-Schwung in draw().
+  const movedL = Math.abs(paddleL.y - prevPaddleLY) > 0.05;
+  const movedR = Math.abs(paddleR.y - prevPaddleRY) > 0.05;
+  prevPaddleLY = paddleL.y;
+  prevPaddleRY = paddleR.y;
+  animL.walkPhase += dt * (movedL ? 11 : 3.2);
+  animR.walkPhase += dt * (movedR ? 11 : 3.2);
+  if (animL.hitTimer > 0) animL.hitTimer = Math.max(0, animL.hitTimer - dt / 0.26);
+  if (animR.hitTimer > 0) animR.hitTimer = Math.max(0, animR.hitTimer - dt / 0.26);
+
   if (countdownActive) return;
 
   // --- Ball bewegen ---
@@ -1172,6 +1348,22 @@ function update(dt) {
     ball.y = LOGICAL_H - ball.r;
     ball.vy *= -1;
     sfxWall();
+  }
+
+  // Geschenk-Power-up: zufaellig auftauchen lassen und auf Treffer durch den
+  // Ball pruefen (gleiches Prinzip wie die Schlaeger-Kollision unten, rein
+  // additiv zur bestehenden Ball-Logik).
+  presentSpawnTimer -= dt;
+  if (!present.active && presentSpawnTimer <= 0) {
+    spawnPresent();
+  }
+  if (present.active) {
+    const dx = ball.x - present.x;
+    const dy = ball.y - present.y;
+    const rr = ball.r + present.r;
+    if (dx * dx + dy * dy <= rr * rr) {
+      collectPresent();
+    }
   }
 
   // Schläger links
@@ -1222,6 +1414,32 @@ function bounceOffPaddle(paddle, dirSign) {
   // Ball leicht aus dem Schläger herausschieben, damit er nicht haengen bleibt
   ball.x = dirSign > 0 ? paddle.x + paddle.w + ball.r + 1 : paddle.x - ball.r - 1;
   sfxHit();
+
+  // Rein kosmetisch: merken wer getroffen hat (fuer Geschenk-Power-up) und
+  // einen kurzen Schlag-Impuls fuer die Arm-Animation in draw() ausloesen.
+  if (paddle === paddleL) {
+    lastHitSide = "left";
+    animL.hitTimer = 1;
+  } else {
+    lastHitSide = "right";
+    animR.hitTimer = 1;
+  }
+}
+
+function spawnPresent() {
+  // Spawnt in der mittleren Tischzone, nicht zu nah an den Schlaegern/Raendern.
+  present.x = randRange(LOGICAL_W * 0.35, LOGICAL_W * 0.65);
+  present.y = randRange(40, LOGICAL_H - 40);
+  present.active = true;
+  presentSpawnTimer = randRange(9, 14);
+}
+
+function collectPresent() {
+  present.active = false;
+  if (presentMesh) presentMesh.visible = false;
+  if (lastHitSide === "left") boostTimerL = POWERUP_DURATION;
+  else if (lastHitSide === "right") boostTimerR = POWERUP_DURATION;
+  sfxPresent();
 }
 
 function updateBot(dt) {
@@ -1244,18 +1462,62 @@ function clamp(v, min, max) {
   return Math.max(min, Math.min(max, v));
 }
 
+// Rein kosmetische Figuren-Animation: Lauf-Bob/Wackeln anhand walkPhase,
+// Arm-Schwung des "freien" Arms, Schlaeger-Schwung + leichtes Stauchen beim
+// Treffer, und leichtes Groesser-Wachsen waehrend des Geschenk-Power-ups.
+// Beeinflusst nur Three.js-Objekte, keine Logik/Physik.
+function applyCharacterAnim(group, anim, boosted, baseX, baseZ) {
+  if (!group) return;
+  const bob = Math.abs(Math.sin(anim.walkPhase)) * 4.5;
+  group.position.set(baseX, bob, baseZ);
+  group.rotation.z = Math.sin(anim.walkPhase * 2) * 0.025;
+
+  const otherArm = group.userData.armOther;
+  if (otherArm) otherArm.rotation.x = Math.sin(anim.walkPhase) * 0.45;
+
+  const batArm = group.userData.armBat;
+  if (batArm) {
+    const swing = Math.sin(anim.hitTimer * Math.PI) * 1.1; // 0 am Anfang/Ende, Spitze in der Mitte
+    batArm.rotation.x = Math.sin(anim.walkPhase) * 0.2 - swing;
+  }
+
+  const boostScale = boosted ? 1.15 : 1;
+  const hitSquash = 1 - Math.sin(anim.hitTimer * Math.PI) * 0.06;
+  group.scale.set(boostScale, boostScale * hitSquash, boostScale);
+}
+
 /* ------------------------------ Zeichnen ------------------------------ */
 function draw() {
   if (charL) {
-    charL.position.set(worldX(paddleL.x + paddleL.w / 2), 0, worldZ(paddleL.y + paddleL.h / 2));
+    applyCharacterAnim(
+      charL,
+      animL,
+      boostTimerL > 0,
+      worldX(paddleL.x + paddleL.w / 2),
+      worldZ(paddleL.y + paddleL.h / 2)
+    );
   }
   if (charR) {
-    charR.position.set(worldX(paddleR.x + paddleR.w / 2), 0, worldZ(paddleR.y + paddleR.h / 2));
+    applyCharacterAnim(
+      charR,
+      animR,
+      boostTimerR > 0,
+      worldX(paddleR.x + paddleR.w / 2),
+      worldZ(paddleR.y + paddleR.h / 2)
+    );
   }
   if (ballMesh) {
     const progress = clamp(ball.x / LOGICAL_W, 0, 1);
     const arc = BALL_ARC_HEIGHT * Math.sin(Math.PI * progress);
     ballMesh.position.set(worldX(ball.x), BALL_VISUAL_R + arc, worldZ(ball.y));
+  }
+  if (presentMesh) {
+    presentMesh.visible = present.active;
+    if (present.active) {
+      const t = performance.now() / 1000;
+      presentMesh.position.set(worldX(present.x), 18 + Math.sin(t * 2.2) * 4, worldZ(present.y));
+      presentMesh.rotation.y = t * 1.4;
+    }
   }
   renderer.render(scene, camera);
 }
